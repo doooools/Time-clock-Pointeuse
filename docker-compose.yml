@@ -1,0 +1,22 @@
+# Example deployment. Put SESSION_SECRET in a `.env` file next to this one (see .env.example), then:
+#   docker compose up -d --build
+services:
+  opointeuse:
+    build: .
+    image: opointeuse:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Required: random string of at least 32 characters (e.g. `openssl rand -hex 32`).
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET (32+ characters) in .env or in the environment}
+      # Instance defaults, used until each user changes their own settings:
+      # DEFAULT_LOCALE: en                 # en | fr
+      # DEFAULT_TIMEZONE: Europe/Paris     # IANA time zone, default UTC
+      # DEFAULT_HOLIDAYS: FR               # public holidays region code, default none
+      # DEFAULT_DAILY_TARGET_MIN: "420"    # daily target in minutes (420 = 7h00)
+    volumes:
+      - opointeuse-data:/data
+
+volumes:
+  opointeuse-data:

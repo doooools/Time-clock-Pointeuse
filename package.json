@@ -13,6 +13,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:node": "vite build --mode node && tsx server/node/build.ts",
+    "start": "node dist/server/index.mjs",
     "preview": "npm run build && vite preview",
     "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",

@@ -8,7 +8,18 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "isolatedModules": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "scripts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "scripts",
+    "server/db/sqlite.ts",
+    "server/db/sqlite.test.ts",
+    "server/entry/node.ts",
+    "server/migrate.ts",
+    "server/migrate.test.ts",
+    "server/node"
+  ]
 }

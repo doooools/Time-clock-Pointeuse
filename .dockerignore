@@ -1,0 +1,26 @@
+# Keep the build context small and free of local data or secrets.
+.git
+.github
+.team
+.wrangler
+.vscode
+.idea
+node_modules
+dist
+data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.local
+*.log
+history-import.sql
+coverage
+Dockerfile
+docker-compose.yml
+.dockerignore
