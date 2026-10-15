@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../../server/node/database";
 import { parseArgs, UsageError } from "./args";
-import type { Ctx, Target } from "./context";
+import { defaultSqlitePath, type Ctx, type Target } from "./context";
 import { generatePassword } from "./password";
 import { runCli } from "./run";
 import { inlineParams, sqlLiteral } from "./sql-inline";
@@ -246,6 +246,20 @@ describe("unlock", () => {
     expect(await runCli(["unlock", "alice"], h().ctx)).toBe(0);
     expect(await target.db.prepare("SELECT failed_logins AS f, locked_until AS l FROM users").first()).toEqual({ f: 0, l: null });
 
+  });
+});
+
+describe("defaultSqlitePath", () => {
+  const never = () => false;
+  it("prefers --db, then DATABASE_PATH, then the default file when it exists", () => {
+    expect(defaultSqlitePath("a.db", { DATABASE_PATH: "b.db" }, () => true)).toBe("a.db");
+    expect(defaultSqlitePath(undefined, { DATABASE_PATH: " b.db " }, () => true)).toBe("b.db");
+    expect(defaultSqlitePath(undefined, {}, () => true)).toBe("./data/opointeuse.db");
+  });
+
+  it("returns undefined when nothing applies", () => {
+    expect(defaultSqlitePath(undefined, {}, never)).toBeUndefined();
+    expect(defaultSqlitePath(undefined, { DATABASE_PATH: "  " }, never)).toBeUndefined();
   });
 });
 

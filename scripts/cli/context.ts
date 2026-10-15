@@ -1,7 +1,9 @@
 // Everything the commands need from the outside world, so tests can replace it.
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { Db } from "../../server/db/types";
-import { databasePath, openDatabase } from "../../server/node/database";
+import { DEFAULT_DATABASE_PATH, databasePath, openDatabase } from "../../server/node/database";
 import { flagBool, flagString, UsageError, type ParsedArgs } from "./args";
 import { WranglerDb, wranglerRunner } from "./wrangler-db";
 
@@ -28,11 +30,27 @@ export type Ctx = {
 
 export const TARGET_HELP = [
   "Choose the database to act on:",
-  "  --db <path>     SQLite file (Node / Docker). Default: $DATABASE_PATH when set.",
+  "  --db <path>     SQLite file (Node / Docker). Default: $DATABASE_PATH (also read from .env),",
+  "                  else ./data/opointeuse.db when that file exists.",
   "  --d1-local      Cloudflare D1 of the local dev environment (wrangler --local).",
   "  --d1-remote     Cloudflare D1 in production (wrangler --remote).",
   "  (--d1-name <name> overrides the D1 database name, default \"opointeuse\".)",
 ].join("\n");
+
+/**
+ * SQLite file to use when no D1 option is given: `--db`, then `$DATABASE_PATH`, then the Node server's default
+ * (`./data/opointeuse.db`) if it exists. Returns undefined when none applies.
+ */
+export function defaultSqlitePath(
+  explicit: string | undefined,
+  env: Ctx["env"],
+  exists: (path: string) => boolean = existsSync,
+): string | undefined {
+  if (explicit) return explicit;
+  const fromEnv = env.DATABASE_PATH?.trim();
+  if (fromEnv) return fromEnv;
+  return exists(resolve(DEFAULT_DATABASE_PATH)) ? DEFAULT_DATABASE_PATH : undefined;
+}
 
 /** Resolves the database from the options and the environment. */
 export async function openTarget(args: ParsedArgs, env: Ctx["env"]): Promise<Target> {
@@ -50,7 +68,7 @@ export async function openTarget(args: ParsedArgs, env: Ctx["env"]): Promise<Tar
       close() {},
     };
   }
-  const raw = db ?? env.DATABASE_PATH?.trim();
+  const raw = defaultSqlitePath(db, env);
   if (!raw) throw new UsageError(`No database selected.\n${TARGET_HELP}`);
   const opened = openDatabase(databasePath({ DATABASE_PATH: raw }));
   return { db: opened.db, label: `SQLite ${opened.path}`, close: () => opened.db.close() };
