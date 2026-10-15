@@ -1,4 +1,4 @@
-// Formatage des durées en minutes : 438 → "7h18", -63 → "-1h03".
+// Duration formatting (minutes), identical in every locale: 438 → "7h18", -63 → "-1h03".
 
 export function fmtDuration(min: number): string {
   const total = Math.round(Math.abs(min));
@@ -13,7 +13,7 @@ export function fmtSigned(min: number): string {
   return `${min < 0 ? "-" : "+"}${fmtDuration(Math.abs(min))}`;
 }
 
-/** Durée avec secondes pour les compteurs live : "3h41:07". */
+/** Duration with seconds for live counters: "3h41:07". */
 export function fmtDurationLive(min: number): string {
   const secs = Math.floor(Math.abs(min) * 60);
   const h = Math.floor(secs / 3600);
@@ -22,7 +22,7 @@ export function fmtDurationLive(min: number): string {
   return `${min < 0 && secs > 0 ? "-" : ""}${h}h${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** Durée décimale pour les exports : 438 → 7.3 */
+/** Decimal hours for exports: 438 → 7.3 */
 export function toHoursDecimal(min: number): number {
   return Math.round((min / 60) * 100) / 100;
 }

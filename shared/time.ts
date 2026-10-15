@@ -1,26 +1,53 @@
-// Helpers de date en heure de Paris. Les horodatages sont des epoch ms (UTC) ;
-// les jours sont des clés "YYYY-MM-DD" en heure locale Europe/Paris.
+// Date helpers. Timestamps are epoch ms (UTC); days are "YYYY-MM-DD" keys in a local time zone.
+// Every helper that depends on the time zone takes an explicit IANA `tz` argument
+// (e.g. "Europe/Paris", "America/New_York", "UTC"). Pure calendar helpers do not.
 
-export const TZ = "Europe/Paris";
 export const MINUTE = 60_000;
 export const DAY_MS = 86_400_000;
 
-const partsFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: TZ,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-});
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/** Cached formatter giving the numeric local date/time parts in `tz`. Throws on an unknown zone. */
+function partsFormatter(tz: string): Intl.DateTimeFormat {
+  let fmt = formatters.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    formatters.set(tz, fmt);
+  }
+  return fmt;
+}
+
+/** True when `tz` is an IANA time zone known to the runtime. */
+export function isValidTimeZone(tz: unknown): tz is string {
+  if (typeof tz !== "string" || !tz.trim()) return false;
+  try {
+    partsFormatter(tz);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Canonical spelling of a valid time zone (e.g. "utc" → "UTC"), or null if unknown. */
+export function canonicalTimeZone(tz: unknown): string | null {
+  if (!isValidTimeZone(tz)) return null;
+  return partsFormatter(tz).resolvedOptions().timeZone;
+}
 
 export type LocalParts = { y: number; m: number; d: number; hh: number; mm: number; ss: number };
 
-export function localParts(ts: number): LocalParts {
+export function localParts(ts: number, tz: string): LocalParts {
   const p: Record<string, number> = {};
-  for (const part of partsFmt.formatToParts(new Date(ts))) {
+  for (const part of partsFormatter(tz).formatToParts(new Date(ts))) {
     if (part.type !== "literal") p[part.type] = Number(part.value);
   }
   return { y: p.year, m: p.month, d: p.day, hh: p.hour % 24, mm: p.minute, ss: p.second };
@@ -32,8 +59,9 @@ export function makeDayKey(y: number, m: number, d: number): string {
   return `${y}-${pad(m)}-${pad(d)}`;
 }
 
-export function dayKey(ts: number): string {
-  const p = localParts(ts);
+/** Local day key of `ts` in `tz`. */
+export function dayKey(ts: number, tz: string): string {
+  const p = localParts(ts, tz);
   return makeDayKey(p.y, p.m, p.d);
 }
 
@@ -42,25 +70,46 @@ export function parseDayKey(key: string): { y: number; m: number; d: number } {
   return { y, m, d };
 }
 
-/** Décalage (ms) de Paris par rapport à UTC à l'instant ts. */
-function tzOffset(ts: number): number {
-  const p = localParts(ts);
+/** True for a well-formed, existing calendar date "YYYY-MM-DD". */
+export function isValidDayKey(key: unknown): key is string {
+  if (typeof key !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return false;
+  const { y, m, d } = parseDayKey(key);
+  if (m < 1 || m > 12 || d < 1) return false;
+  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/** Offset (ms) of `tz` from UTC at instant `ts` (local = UTC + offset). */
+function tzOffset(ts: number, tz: string): number {
+  const p = localParts(ts, tz);
   const asUtc = Date.UTC(p.y, p.m - 1, p.d, p.hh, p.mm, p.ss);
   return asUtc - Math.floor(ts / 1000) * 1000;
 }
 
-/** Convertit une heure locale de Paris en epoch ms (gère les changements d'heure). */
-export function zonedToUtc(y: number, m: number, d: number, hh = 0, mm = 0, ss = 0): number {
-  const guess = Date.UTC(y, m - 1, d, hh, mm, ss);
-  let ts = guess - tzOffset(guess);
-  const off2 = tzOffset(ts);
-  if (guess - off2 !== ts) ts = guess - off2;
-  return ts;
+const HALF_DAY = DAY_MS / 2;
+
+/**
+ * Converts a local wall-clock time in `tz` to epoch ms, handling DST transitions in any zone:
+ * - ambiguous time (clocks set back): the first occurrence is returned;
+ * - non-existent time (clocks set forward): it is shifted forward by the gap (02:30 → 03:30).
+ */
+export function zonedToUtc(tz: string, y: number, m: number, d: number, hh = 0, mm = 0, ss = 0): number {
+  const wall = Date.UTC(y, m - 1, d, hh, mm, ss);
+  // A transition never happens twice within 12 hours, so the offsets on either side are known.
+  const before = tzOffset(wall - HALF_DAY, tz);
+  const after = tzOffset(wall + HALF_DAY, tz);
+  const candidates = before === after ? [before] : [before, after];
+  let best: number | null = null;
+  for (const off of candidates) {
+    const ts = wall - off;
+    if (tzOffset(ts, tz) === off && (best === null || ts < best)) best = ts;
+  }
+  return best ?? wall - before;
 }
 
-export function dayStart(key: string): number {
+/** Epoch ms of local midnight of `key` in `tz`. */
+export function dayStart(key: string, tz: string): number {
   const { y, m, d } = parseDayKey(key);
-  return zonedToUtc(y, m, d);
+  return zonedToUtc(tz, y, m, d);
 }
 
 export function addDays(key: string, n: number): string {
@@ -69,13 +118,14 @@ export function addDays(key: string, n: number): string {
   return makeDayKey(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
 }
 
-/** 1 = lundi … 7 = dimanche */
+/** ISO weekday: 1 = Monday … 7 = Sunday. */
 export function weekday(key: string): number {
   const { y, m, d } = parseDayKey(key);
   const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   return wd === 0 ? 7 : wd;
 }
 
+/** Monday of the week containing `key`. */
 export function weekStart(key: string): string {
   return addDays(key, 1 - weekday(key));
 }
@@ -96,7 +146,7 @@ export function eachDay(from: string, to: string): string[] {
   return out;
 }
 
-/** Numéro de semaine ISO 8601. */
+/** ISO 8601 week number. */
 export function isoWeek(key: string): { year: number; week: number } {
   const thursday = addDays(key, 4 - weekday(key));
   const { y } = parseDayKey(thursday);
@@ -104,14 +154,15 @@ export function isoWeek(key: string): { year: number; week: number } {
   return { year: y, week };
 }
 
-/** Minutes écoulées depuis minuit (heure de Paris). */
-export function minutesOfDay(ts: number): number {
-  const p = localParts(ts);
+/** Minutes elapsed since local midnight in `tz`. */
+export function minutesOfDay(ts: number, tz: string): number {
+  const p = localParts(ts, tz);
   return p.hh * 60 + p.mm + p.ss / 60;
 }
 
-export function formatClock(ts: number, withSeconds = false): string {
-  const p = localParts(ts);
+/** Local clock time "HH:MM" (or "HH:MM:SS") in `tz`. */
+export function formatClock(ts: number, tz: string, withSeconds = false): string {
+  const p = localParts(ts, tz);
   return withSeconds ? `${pad(p.hh)}:${pad(p.mm)}:${pad(p.ss)}` : `${pad(p.hh)}:${pad(p.mm)}`;
 }
 
