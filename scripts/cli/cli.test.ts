@@ -3,6 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../../server/node/database";
+import { computeDays } from "../../shared/compute";
+import { resolveSettings } from "../../shared/settings";
+import { generateDemo } from "./seed-demo";
 import { parseArgs, UsageError } from "./args";
 import { defaultSqlitePath, type Ctx, type Target } from "./context";
 import { generatePassword } from "./password";
@@ -198,6 +201,34 @@ describe.each([
     expect((await run(["list"])).text).not.toContain("alice");
   });
 
+  it("seeds demo data once, refuses accounts with punches unless --yes, and is deterministic", async () => {
+    const target = makeTarget();
+    const h = () => makeCtx(target);
+    await runCli(["add", "demo", "--admin", "--timezone", "Europe/Paris", "--holidays", "FR", "--generate-password"], h().ctx);
+
+    const first = h();
+    expect(await runCli(["seed-demo", "demo", "--months", "2"], first.ctx)).toBe(0);
+    expect(first.text()).toContain("Demo data added for demo");
+    const count = async (table: string) =>
+      (await target.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
+    const punches = await count("punches");
+    expect(punches).toBeGreaterThan(100);
+    expect((await target.db.prepare("SELECT DISTINCT source FROM punches").all()).results).toEqual([{ source: "import" }]);
+    expect(await count("day_marks")).toBe(7);
+    expect(await target.db.prepare("SELECT half FROM day_marks WHERE type = 'comp_time'").first()).toEqual({ half: "pm" });
+
+    const refused = h();
+    expect(await runCli(["seed-demo", "demo"], refused.ctx)).toBe(1);
+    expect(refused.errText()).toContain("--yes");
+    // With --yes, days that already have punches are left alone: nothing is added the second time.
+    expect(await runCli(["seed-demo", "demo", "--months", "2", "--yes"], h().ctx)).toBe(0);
+    expect(await count("punches")).toBe(punches);
+    expect(await count("day_marks")).toBe(7);
+
+    expect(await runCli(["seed-demo", "demo", "--months", "0"], h().ctx)).toBe(2);
+    expect(await runCli(["seed-demo", "ghost"], h().ctx)).toBe(1);
+  });
+
   it("imports punches in the account's time zone and skips duplicates", async () => {
     const target = makeTarget();
     const h = (stdin = "") => makeCtx(target, stdin);
@@ -246,6 +277,49 @@ describe("unlock", () => {
     expect(await runCli(["unlock", "alice"], h().ctx)).toBe(0);
     expect(await target.db.prepare("SELECT failed_logins AS f, locked_until AS l FROM users").first()).toEqual({ f: 0, l: null });
 
+  });
+});
+
+describe("generateDemo", () => {
+  const settings = resolveSettings({ timezone: "Europe/Paris", holidays: "FR" });
+  const options = { settings, lastDay: "2026-10-14", months: 3, seed: 42 };
+
+  it("is deterministic and depends on the seed", () => {
+    expect(generateDemo(options)).toEqual(generateDemo(options));
+    expect(generateDemo({ ...options, seed: 7 }).punches).not.toEqual(generateDemo(options).punches);
+  });
+
+  it("produces workday punches, marks and the deliberate anomalies", () => {
+    const data = generateDemo(options);
+    expect(data.days.leave).toHaveLength(5);
+    expect(data.days.sick).toHaveLength(1);
+    expect(data.days.compTime).toHaveLength(1);
+    expect(data.days.missingExit).toHaveLength(2);
+    expect(data.days.doubleTap).toHaveLength(1);
+    expect(data.marks.find((m) => m.type === "comp_time")).toMatchObject({ portion: 0.5, half: "pm" });
+
+    const days = computeDays(data.punches.map((ts, id) => ({ id, ts })), data.marks, settings, Date.UTC(2026, 9, 15, 12));
+    // No punch on weekends or public holidays (2026-11-01 is outside the range; 2026-08-15 is a Saturday).
+    expect(days.filter((d) => d.restDay && d.punches.length)).toEqual([]);
+    expect(days.filter((d) => d.anomalies.includes("missing_exit")).map((d) => d.date).sort()).toEqual([...data.days.missingExit].sort());
+    expect(days.filter((d) => d.anomalies.includes("short_pair")).map((d) => d.date)).toEqual(data.days.doubleTap);
+    const worked = days.filter((d) => d.punches.length >= 4 && !d.anomalies.length);
+    expect(worked.length).toBeGreaterThan(40);
+    // Breaks between 30 and 90 minutes, arrival 08:00-09:30.
+    for (const d of worked) {
+      const gap = (d.intervals[1].start - d.intervals[0].end) / 60000;
+      expect(gap).toBeGreaterThanOrEqual(29);
+      expect(gap).toBeLessThanOrEqual(91);
+    }
+    const last = days.filter((d) => !d.isToday && !d.isFuture).at(-1)!;
+    expect(last.balanceMin).not.toBe(0);
+  });
+
+  it("stays within the requested period", () => {
+    const short = generateDemo({ ...options, months: 1 });
+    expect(short.marks).toHaveLength(7);
+    expect(short.punches.length).toBeGreaterThan(40);
+    expect(Math.max(...short.punches)).toBeLessThan(Date.UTC(2026, 9, 14, 23));
   });
 });
 

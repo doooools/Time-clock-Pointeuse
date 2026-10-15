@@ -4,7 +4,8 @@ import { PARSE_ISSUE_LABELS } from "../../shared/labels";
 import { parseRawTimestamps, type DateOrder } from "../../shared/parse";
 import { normalizeHolidayCode } from "../../shared/holidays";
 import { normalizeLocale, resolveSettings, sanitizeSettings, type Settings } from "../../shared/settings";
-import { canonicalTimeZone, dayKey, formatClock } from "../../shared/time";
+import { computeDays } from "../../shared/compute";
+import { addDays, canonicalTimeZone, dayKey, formatClock } from "../../shared/time";
 import type { Db } from "../../server/db/types";
 import type { UserRow } from "../../server/env";
 import {
@@ -24,6 +25,7 @@ import {
 import { flagBool, flagString, parseArgs, UsageError, type ParsedArgs } from "./args";
 import { TARGET_HELP, type Ctx, type Target } from "./context";
 import { obtainPassword } from "./password";
+import { generateDemo } from "./seed-demo";
 
 /** Same rules as `POST /api/punches/bulk`. */
 const DEDUP_MS = 60_000;
@@ -49,6 +51,9 @@ Commands:
   remove <username> [--yes]                         Delete an account and all its data.
   import <username> <file|-> [--date-order dmy|mdy] [--dry-run]
                                                     Import punches from a text file ("-" = stdin).
+  seed-demo <username> [--months 3] [--seed 42] [--yes]
+                                                    Fill an account with synthetic punches, marks and a few
+                                                    anomalies (demo, screenshots). Refuses if it has punches.
 
 Password options (add, passwd):
   (default)             hidden prompt, asked twice, when run in a terminal
@@ -315,6 +320,67 @@ async function importHistory(a: ParsedArgs, ctx: Ctx, t: Target) {
   );
 }
 
+async function seedDemo(a: ParsedArgs, ctx: Ctx, t: Target) {
+  rejectExtra(a, 2);
+  const user = await findUser(t.db, need(a, 1, "username"));
+  const months = Number(flagString(a, "months") ?? 3);
+  if (!Number.isInteger(months) || months < 1 || months > 24) throw new UsageError("--months must be a whole number from 1 to 24.");
+  const seed = Number(flagString(a, "seed") ?? 42);
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new UsageError("--seed must be a whole number from 0 to 4294967295.");
+
+  const settings = resolveSettings(instanceDefaults(ctx.env), storedSettings(user));
+  const tz = settings.timezone;
+  const { results: existing } = await t.db
+    .prepare("SELECT ts FROM punches WHERE user_id = ? AND deleted_at IS NULL")
+    .bind(user.id)
+    .all<{ ts: number }>();
+  if (existing.length && !flagBool(a, "yes")) {
+    throw new CliError(`${user.username} already has ${existing.length} punches: add --yes to add demo data on the days that have none.`);
+  }
+
+  const now = ctx.now();
+  const data = generateDemo({ settings, lastDay: addDays(dayKey(now, tz), -1), months, seed });
+  // Never touch a day that already has punches.
+  const busy = new Set(existing.map((r) => dayKey(r.ts, tz)));
+  const punches = data.punches.filter((ts) => !busy.has(dayKey(ts, tz)));
+  const marks = data.marks.filter((m) => !busy.has(m.date));
+
+  const stmts = [];
+  for (let i = 0; i < punches.length; i += INSERT_CHUNK) {
+    const chunk = punches.slice(i, i + INSERT_CHUNK);
+    stmts.push(
+      t.db
+        .prepare(`INSERT INTO punches (user_id, ts, source, created_at) VALUES ${chunk.map(() => "(?, ?, 'import', ?)").join(", ")}`)
+        .bind(...chunk.flatMap((ts) => [user.id, ts, now])),
+    );
+  }
+  for (const m of marks) {
+    stmts.push(
+      t.db
+        .prepare(
+          `INSERT INTO day_marks (user_id, date, type, portion, half, note) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (user_id, date) DO UPDATE SET type = excluded.type, portion = excluded.portion, half = excluded.half, note = excluded.note`,
+        )
+        .bind(user.id, m.date, m.type, m.portion, m.half, m.note),
+    );
+  }
+  if (stmts.length) await t.db.batch(stmts);
+
+  const days = computeDays(
+    punches.map((ts, id) => ({ id, ts })),
+    marks,
+    settings,
+    now,
+  );
+  const balance = days.filter((d) => !d.isToday && !d.isFuture).at(-1)?.balanceMin ?? 0;
+  const sign = balance < 0 ? "-" : "+";
+  const hm = `${Math.floor(Math.abs(balance) / 60)}h${String(Math.round(Math.abs(balance) % 60)).padStart(2, "0")}`;
+  ctx.out(`Demo data added for ${user.username} (time zone ${tz}, ${months} month(s), seed ${seed}).`);
+  ctx.out(`${punches.length} punches over ${data.days.worked} days, ${marks.length} marks (${data.days.leave.length} leave, ${data.days.sick.length} sick, ${data.days.compTime.length} half day comp time).`);
+  ctx.out(`Deliberate anomalies: missing exit ${data.days.missingExit.join(", ") || "-"}; double tap ${data.days.doubleTap.join(", ") || "-"}.`);
+  ctx.out(`Resulting balance: ${sign}${hm}.`);
+}
+
 /** Distance from `ts` to the closest value of a sorted array (Infinity if empty). */
 export function nearestDistance(sorted: number[], ts: number): number {
   let lo = 0;
@@ -340,6 +406,7 @@ const COMMANDS: Record<string, (a: ParsedArgs, ctx: Ctx, t: Target) => Promise<v
   unlock,
   remove,
   import: importHistory,
+  "seed-demo": seedDemo,
 };
 
 /** Runs the CLI and returns the process exit code. */

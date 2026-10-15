@@ -3,7 +3,7 @@
 export class UsageError extends Error {}
 
 /** Flags that take a value. */
-const VALUE_FLAGS = ["db", "name", "locale", "timezone", "holidays", "date-order", "d1-name"] as const;
+const VALUE_FLAGS = ["db", "name", "locale", "timezone", "holidays", "date-order", "d1-name", "months", "seed"] as const;
 /** Flags that do not take a value. */
 const BOOLEAN_FLAGS = [
   "admin",
