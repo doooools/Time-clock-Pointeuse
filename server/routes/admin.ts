@@ -72,6 +72,7 @@ export const adminRoutes = new Hono<AppEnv>()
     const sets: string[] = [];
     const values: unknown[] = [];
     let revokeSessions = false;
+    let unlock = false;
     let removesAdmin = false;
 
     if (body.displayName !== undefined) {
@@ -102,7 +103,14 @@ export const adminRoutes = new Hono<AppEnv>()
       sets.push("password_hash = ?");
       values.push(await hashPassword(body.password as string));
       revokeSessions = true;
+      unlock = true;
     }
+    // `unlock: true` lifts the brute-force lock (setting a new password does too).
+    if (body.unlock !== undefined) {
+      if (typeof body.unlock !== "boolean") return fail(c, 400, "invalidField", { field: "unlock" });
+      unlock ||= body.unlock;
+    }
+    if (unlock) sets.push("failed_logins = 0", "locked_until = NULL");
     if (body.settings !== undefined) {
       const result = applySettingsPatch(storedSettings(target), body.settings);
       if (!result.ok) return fail(c, 400, "invalidSettings", { keys: result.invalid.join(", ") });

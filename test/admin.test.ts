@@ -37,6 +37,8 @@ describe("admin API: accounts", () => {
       role: "admin",
       disabled: false,
       createdAt: expect.any(Number),
+      locked: false,
+      lockedUntil: null,
     });
     expect(res.text).not.toMatch(/password|webhook|token|hash/i);
   });

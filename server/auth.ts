@@ -4,7 +4,17 @@ import type { AppEnv, UserRow } from "./env";
 import { fail, readBody } from "./http";
 import { hashPassword, verifyPassword } from "./passwords";
 import { SESSION_COOKIE, SESSION_DAYS, SESSION_MS, signSession, verifySession } from "./session";
-import { getUserById, getUserByUsername, instanceDefaults, publicUser, resolveUserSettings } from "./users";
+import {
+  clearLoginFailures,
+  getUserById,
+  getUserByUsername,
+  instanceDefaults,
+  lockRemainingMs,
+  LOGIN_LOCK_MS,
+  publicUser,
+  reserveLoginAttempt,
+  resolveUserSettings,
+} from "./users";
 import { resolveSettings } from "../shared/settings";
 
 /** Slows down password guessing on failed logins. */
@@ -12,6 +22,14 @@ const LOGIN_FAILURE_DELAY_MS = 800;
 
 /** Hash checked when the username does not exist, so both failure paths cost the same. */
 let dummyHash: Promise<string> | undefined;
+
+/** 429 for a locked account, with `Retry-After`. The lock end is re-read so the time left is accurate. */
+export async function tooManyAttempts(c: Context<AppEnv>, user: Pick<UserRow, "id">) {
+  const fresh = await getUserById(c.env.DB, user.id);
+  const remaining = fresh ? lockRemainingMs(fresh) : LOGIN_LOCK_MS;
+  c.header("Retry-After", String(Math.max(1, Math.ceil(remaining / 1000))));
+  return fail(c, 429, "tooManyAttempts", { minutes: Math.max(1, Math.ceil(remaining / 60_000)) });
+}
 
 /** Loads the user behind the session cookie, or null (bad signature, expired, disabled, revoked). */
 export async function sessionUser(c: Context<AppEnv>): Promise<UserRow | null> {
@@ -67,6 +85,8 @@ export const authRoutes = new Hono<AppEnv>()
     const username = typeof body.username === "string" ? body.username.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const user = username ? await getUserByUsername(c.env.DB, username) : null;
+    // Per-account lock after too many failures (this reveals that the account exists: accepted trade-off).
+    if (user && !(await reserveLoginAttempt(c.env.DB, user.id))) return tooManyAttempts(c, user);
     // Always run one PBKDF2 verification so timing does not reveal whether the username exists.
     const ok = user
       ? await verifyPassword(password, user.password_hash)
@@ -75,6 +95,7 @@ export const authRoutes = new Hono<AppEnv>()
       await new Promise((r) => setTimeout(r, LOGIN_FAILURE_DELAY_MS));
       return fail(c, 401, "invalidCredentials");
     }
+    await clearLoginFailures(c.env.DB, user.id);
     await issueSession(c, user);
     return c.json({ ok: true });
   })

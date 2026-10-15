@@ -95,7 +95,7 @@ describe("settings", () => {
     // A valid key next to an invalid one: nothing is saved.
     expect((await c.put("/api/settings", { dailyTargetMin: 200, locale: "xx" })).status).toBe(400);
     expect((await c.get("/api/settings")).body.stored).toEqual({ dailyTargetMin: 300 });
-    expect((await c.request("PUT", "/api/settings", "[1]")).status).toBe(400);
+    expect((await c.request("PUT", "/api/settings", "[1]", { "content-type": "application/json" })).status).toBe(400);
   });
 
   it("lists the invalid keys in the user's language", async () => {

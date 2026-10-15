@@ -6,6 +6,7 @@ import { fail } from "./http";
 import { adminRoutes } from "./routes/admin";
 import { apiRoutes } from "./routes/api";
 import { webhookRoutes } from "./routes/webhook";
+import { apiBodyLimit, csrfGuard, securityHeaders } from "./security";
 import { isValidSecret, MIN_SECRET_LENGTH } from "./session";
 import { instanceDefaults } from "./users";
 
@@ -15,6 +16,9 @@ import { instanceDefaults } from "./users";
  */
 export const app = new Hono<AppEnv>();
 
+// Security headers on every response, API and front end (see server/security.ts).
+app.use("*", securityHeaders);
+
 // Every API request: default language from the instance, then refuse to run without a proper secret.
 app.use("/api/*", async (c, next) => {
   c.set("locale", resolveSettings(instanceDefaults(c.env)).locale);
@@ -23,6 +27,8 @@ app.use("/api/*", async (c, next) => {
   }
   await next();
 });
+app.use("/api/*", csrfGuard);
+app.use("/api/*", apiBodyLimit);
 
 app.route("/api/webhook", webhookRoutes);
 app.route("/api", authRoutes);

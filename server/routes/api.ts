@@ -2,18 +2,20 @@ import { Hono } from "hono";
 import { MARK_TYPES, type MarkType } from "../../shared/compute";
 import { resolveSettings } from "../../shared/settings";
 import { isValidDayKey } from "../../shared/time";
-import { issueSession } from "../auth";
+import { issueSession, tooManyAttempts } from "../auth";
 import { loadPunches, userDataPayload } from "../data";
 import type { AppEnv } from "../env";
 import { fail, isNote, isTs, NOTE_MAX, parseId, readBody } from "../http";
 import { verifyPassword } from "../passwords";
 import {
   applySettingsPatch,
+  clearLoginFailures,
   instanceDefaults,
   passwordProblem,
   PASSWORD_MAX,
   PASSWORD_MIN,
   regenerateWebhookToken,
+  reserveLoginAttempt,
   resolveUserSettings,
   setPassword,
   storedSettings,
@@ -159,9 +161,12 @@ export const apiRoutes = new Hono<AppEnv>()
   .post("/me/password", async (c) => {
     const user = c.get("user");
     const { currentPassword, newPassword } = await readBody(c);
+    // Same per-account lock as the login, so a stolen session cannot be used to guess the password.
+    if (!(await reserveLoginAttempt(c.env.DB, user.id))) return tooManyAttempts(c, user);
     if (typeof currentPassword !== "string" || !(await verifyPassword(currentPassword, user.password_hash))) {
       return fail(c, 400, "wrongCurrentPassword");
     }
+    await clearLoginFailures(c.env.DB, user.id);
     const problem = passwordProblem(newPassword);
     if (problem) return fail(c, 400, problem, { min: PASSWORD_MIN, max: PASSWORD_MAX });
     const sessionVersion = await setPassword(c.env.DB, user.id, newPassword as string);

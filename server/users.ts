@@ -28,14 +28,28 @@ export function passwordProblem(v: unknown): PasswordProblem | null {
 // --- Public shapes ---
 
 export type PublicUser = { id: number; username: string; displayName: string | null; role: Role };
-export type AdminUserView = PublicUser & { disabled: boolean; createdAt: number };
+export type AdminUserView = PublicUser & {
+  disabled: boolean;
+  createdAt: number;
+  /** Password checks are temporarily refused after too many failures (see `reserveLoginAttempt`). */
+  locked: boolean;
+  /** End of the lock (epoch ms) when `locked`, else null. */
+  lockedUntil: number | null;
+};
 
 export function publicUser(u: UserRow): PublicUser {
   return { id: u.id, username: u.username, displayName: u.display_name, role: u.role };
 }
 
-export function adminUserView(u: UserRow): AdminUserView {
-  return { ...publicUser(u), disabled: u.disabled_at !== null, createdAt: u.created_at };
+export function adminUserView(u: UserRow, now = Date.now()): AdminUserView {
+  const lockedUntil = lockRemainingMs(u, now) > 0 ? u.locked_until : null;
+  return {
+    ...publicUser(u),
+    disabled: u.disabled_at !== null,
+    createdAt: u.created_at,
+    locked: lockedUntil !== null,
+    lockedUntil,
+  };
 }
 
 // --- Settings ---
@@ -73,14 +87,15 @@ export function applySettingsPatch(
   patch: unknown,
 ): { ok: true; settings: Partial<Settings> } | { ok: false; invalid: string[] } {
   if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return { ok: false, invalid: ["(body)"] };
-  const next: Record<string, unknown> = { ...stored };
-  const values: Record<string, unknown> = {};
+  // Null-prototype objects: a "__proto__" key is then an ordinary (unknown, so rejected) key.
+  const next: Record<string, unknown> = Object.assign(Object.create(null), stored);
+  const values: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(patch)) {
     if (value === null) delete next[key];
     else values[key] = value;
   }
   const clean = sanitizeSettings(values) as Record<string, unknown>;
-  const invalid = Object.keys(values).filter((k) => !(k in clean));
+  const invalid = Object.keys(values).filter((k) => !Object.hasOwn(clean, k));
   if (invalid.length) return { ok: false, invalid };
   // Re-sanitize the merged result so removed or unknown keys never reach the database.
   return { ok: true, settings: sanitizeSettings({ ...next, ...clean }) };
@@ -89,7 +104,8 @@ export function applySettingsPatch(
 // --- Queries ---
 
 const COLUMNS =
-  "id, username, display_name, password_hash, role, webhook_token, settings, session_version, created_at, disabled_at";
+  "id, username, display_name, password_hash, role, webhook_token, settings, session_version, created_at, disabled_at, " +
+  "failed_logins, locked_until";
 
 export function getUserById(db: Db, id: number): Promise<UserRow | null> {
   return db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ?`).bind(id).first<UserRow>();
@@ -154,11 +170,15 @@ export async function regenerateWebhookToken(db: Db, userId: number): Promise<st
   return meta.changes ? token : null;
 }
 
-/** Sets a new password and bumps the session version (revokes every session). Returns the new version. */
+/**
+ * Sets a new password, bumps the session version (revokes every session) and clears the login lock.
+ * Returns the new version.
+ */
 export async function setPassword(db: Db, userId: number, password: string): Promise<number | null> {
   const row = await db
     .prepare(
-      "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ? RETURNING session_version",
+      `UPDATE users SET password_hash = ?, session_version = session_version + 1, failed_logins = 0, locked_until = NULL
+       WHERE id = ? RETURNING session_version`,
     )
     .bind(await hashPassword(password), userId)
     .first<{ session_version: number }>();
@@ -174,3 +194,44 @@ export const NOT_LAST_ACTIVE_ADMIN = `NOT (
   (SELECT role = 'admin' AND disabled_at IS NULL FROM users WHERE id = ?)
   AND (SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled_at IS NULL AND id <> ?) = 0
 )`;
+
+// --- Brute-force protection (migration 0002) ---
+
+/** Consecutive failed password checks that lock the account… */
+export const LOGIN_MAX_FAILURES = 10;
+/** …for this long. */
+export const LOGIN_LOCK_MS = 15 * 60_000;
+
+/** Milliseconds left on the account's lock (0 if not locked). */
+export function lockRemainingMs(u: Pick<UserRow, "locked_until">, now = Date.now()): number {
+  return u.locked_until !== null && u.locked_until > now ? u.locked_until - now : 0;
+}
+
+/**
+ * Reserves one password check for this account, before running it: the attempt is counted as a failure
+ * up front, so parallel requests cannot exceed LOGIN_MAX_FAILURES per lock period. The attempt that reaches
+ * the limit is still allowed and sets the lock. Returns false when the account is locked (answer 429
+ * without checking the password). Call `clearLoginFailures` when the password turns out to be right.
+ * Only password checks use this: existing sessions and the webhook are never affected.
+ */
+export async function reserveLoginAttempt(db: Db, userId: number, now = Date.now()): Promise<boolean> {
+  const { meta } = await db
+    .prepare(
+      `UPDATE users SET
+         failed_logins = CASE WHEN failed_logins + 1 >= ? THEN 0 ELSE failed_logins + 1 END,
+         locked_until = CASE WHEN failed_logins + 1 >= ? THEN ? ELSE NULL END
+       WHERE id = ? AND (locked_until IS NULL OR locked_until <= ?)`,
+    )
+    .bind(LOGIN_MAX_FAILURES, LOGIN_MAX_FAILURES, now + LOGIN_LOCK_MS, userId, now)
+    .run();
+  return meta.changes > 0;
+}
+
+/** Resets the failure counter and lifts the lock (successful password check, or admin unlock). */
+export async function clearLoginFailures(db: Db, userId: number): Promise<boolean> {
+  const { meta } = await db
+    .prepare("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?")
+    .bind(userId)
+    .run();
+  return meta.changes > 0;
+}

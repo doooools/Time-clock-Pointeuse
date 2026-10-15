@@ -8,12 +8,16 @@ const en = {
   notFound: "Not found.",
   invalidJson: "Invalid JSON body.",
   serverError: "Server error.",
+  crossSiteRequest: "Cross-site request refused.",
+  jsonRequired: "The request body must be JSON (Content-Type: application/json).",
+  payloadTooLarge: "Request body too large (at most {max} bytes).",
   missingSessionSecret:
     "Server misconfigured: SESSION_SECRET is missing or shorter than {min} characters. Set it and restart.",
   // Auth
   invalidCredentials: "Wrong username or password.",
   invalidWebhookToken: "Invalid or unknown webhook token.",
   wrongCurrentPassword: "The current password is wrong.",
+  tooManyAttempts: "Too many failed attempts: this account is locked for {minutes} min.",
   passwordTooShort: "The password must be at least {min} characters long.",
   passwordTooLong: "The password must be at most {max} characters long.",
   // Data
@@ -46,11 +50,15 @@ const fr: Record<MessageKey, string> = {
   notFound: "Introuvable.",
   invalidJson: "Corps JSON invalide.",
   serverError: "Erreur serveur.",
+  crossSiteRequest: "Requête intersite refusée.",
+  jsonRequired: "Le corps de la requête doit être du JSON (Content-Type: application/json).",
+  payloadTooLarge: "Corps de requête trop volumineux ({max} octets au plus).",
   missingSessionSecret:
     "Serveur mal configuré : SESSION_SECRET est absent ou fait moins de {min} caractères. Définissez-le puis redémarrez.",
   invalidCredentials: "Identifiant ou mot de passe incorrect.",
   invalidWebhookToken: "Jeton de webhook invalide ou inconnu.",
   wrongCurrentPassword: "Le mot de passe actuel est incorrect.",
+  tooManyAttempts: "Trop de tentatives échouées : ce compte est verrouillé pendant {minutes} min.",
   passwordTooShort: "Le mot de passe doit faire au moins {min} caractères.",
   passwordTooLong: "Le mot de passe doit faire au plus {max} caractères.",
   invalidTimestamp: "Horodatage invalide.",

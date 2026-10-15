@@ -29,6 +29,10 @@ export type UserRow = {
   session_version: number;
   created_at: number;
   disabled_at: number | null;
+  /** Consecutive failed password checks (migration 0002). */
+  failed_logins: number;
+  /** Password checks are refused until this epoch ms (migration 0002); null = not locked. */
+  locked_until: number | null;
 };
 
 export type AppEnv = {

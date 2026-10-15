@@ -149,8 +149,9 @@ describe("auth", () => {
 
   it("rejects invalid JSON bodies with 400", async () => {
     const c = new Client(makeEnv());
-    expect((await c.post("/api/login", "{not json")).status).toBe(400);
-    expect((await c.post("/api/login", "[1,2]")).status).toBe(400);
+    const json = { "content-type": "application/json" };
+    expect((await c.post("/api/login", "{not json", json)).status).toBe(400);
+    expect((await c.post("/api/login", "[1,2]", json)).status).toBe(400);
   });
 });
 
