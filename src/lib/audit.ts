@@ -102,7 +102,8 @@ function describePunch(e: AuditEntryView, t: TFn, tz: string): ChangeDescription
 
 function describeMark(e: AuditEntryView, t: TFn): ChangeDescription {
   const date = typeof e.target === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.target) ? e.target : undefined;
-  if (e.action === "mark.clear") return { title: t("journal.markClear"), lines: [], date };
+  const day = date ? shortDate(date) : "";
+  if (e.action === "mark.clear") return { title: t("journal.markClear", { date: day }), lines: [], date };
   const after = obj(e.after);
   const type = typeof after.type === "string" && after.type in MARK_KEYS ? t(MARK_KEYS[after.type as keyof typeof MARK_KEYS]) : "?";
   const half = after.half === "am" ? t("journal.halfAm") : after.half === "pm" ? t("journal.halfPm") : null;
@@ -111,7 +112,7 @@ function describeMark(e: AuditEntryView, t: TFn): ChangeDescription {
   if (portion !== null && portion < 1 && !half) lines.push(t("journal.linePortion", { portion: Math.round(portion * 100) }));
   const note = str(after.note);
   if (note) lines.push(t("journal.lineNote", { note }));
-  const title = half ? t("journal.markSetHalf", { type, half }) : t("journal.markSet", { type });
+  const title = half ? t("journal.markSetHalf", { type, half, date: day }) : t("journal.markSet", { type, date: day });
   return { title, lines, date };
 }
 
@@ -126,6 +127,7 @@ function describeUser(e: AuditEntryView, t: TFn): ChangeDescription {
       return { title: t("journal.userCreate"), lines };
     }
     case "user.token":
+      lines.push(t("journal.lineTokenReminder"));
       return { title: t("journal.userToken"), lines };
     case "user.unlock":
       return { title: t("journal.userUnlock"), lines };
@@ -143,9 +145,21 @@ function describeUser(e: AuditEntryView, t: TFn): ChangeDescription {
         if (field in before) lines.push(t("journal.lineField", { field: label, from: plain(t, field, before[field]), to: plain(t, field, after[field]) }));
         else lines.push(t("journal.lineFieldSet", { field: label, to: plain(t, field, after[field]) }));
       }
-      return { title: t("journal.userUpdate"), lines };
+      const keys = Object.keys(after);
+      const rights = keys.filter((k) => k === "editOwn" || k === "viewPresence" || k === "viewTeam");
+      let title = t("journal.userUpdate");
+      if (keys.length === 1 && keys[0] === "password") title = t("journal.userPassword");
+      else if (keys.length === 1 && keys[0] === "role") title = t("journal.userRole", { role: role(t, after.role) });
+      else if (rights.length && rights.length === keys.length) title = t("journal.userRights");
+      return { title, lines };
     }
   }
+}
+
+/** Author shown for an entry: the account, "command line", or "deleted account" (no actor but a web change). */
+export function authorLabel(entry: AuditEntryView, t: TFn): string {
+  if (entry.actor) return entry.actor.displayName || "";
+  return entry.source === "cli" ? t("journal.byCli") : t("journal.byDeleted");
 }
 
 /** Describes a change in the language of `t`; clock times and days are rendered in the time zone `tz` of the data owner. */

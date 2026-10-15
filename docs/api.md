@@ -231,8 +231,8 @@ empty database is always an owner. An account the caller is not allowed to read 
 
 | Request | Needs | Result |
 |---|---|---|
-| `GET /api/team` | `viewTeam`, `viewPresence` or `manageUsers` (else `403`) | `{ "members": [ { id, username, displayName, role, disabled } ] }` for owners/admins (all accounts). A `user` gets `{ id, displayName, role }` for active accounts only (`displayName` falls back to the username). |
-| `GET /api/team/presence` | `viewPresence` (else `403`) | `{ "members": [ { id, displayName, present, since, lastPunch } ] }`: active accounts, "today" cut in each account's own time zone. `since` = start of the open interval when `present`. |
+| `GET /api/team` | `viewTeam`, `viewPresence` or `manageUsers` (else `403`) | `{ "members": [ { id, username, displayName, role, disabled } ] }` for owners/admins (all accounts). A `user` gets `{ id, displayName, role }` for active accounts only, without `username`: the display name falls back to `Member #id` (French: `Membre n° id`), the login name is shown only to managers and to the account itself. |
+| `GET /api/team/presence` | `viewPresence` (else `403`) | `{ "members": [ { id, displayName, present, since, lastPunch } ] }`: active accounts, "today" cut in each account's own time zone. `since` = start of the open interval when `present`. `lastPunch` is returned only when it dates from today or yesterday in the member's time zone, otherwise `null`. |
 | `GET /api/team/:id/data` | yourself, or `viewTeam` | same payload as `GET /api/data` plus `"canEdit": boolean`. Unknown or unreadable account: `404` (a `user` cannot read disabled accounts). |
 | `POST /api/team/:id/punches` | `editOthers` on that account | same as `POST /api/punches` |
 | `PATCH` / `DELETE /api/team/:id/punches/:pid` | idem | same as the personal routes |
@@ -240,7 +240,7 @@ empty database is always an owner. An account the caller is not allowed to read 
 | `POST /api/team/:id/punches/bulk` | idem | idem |
 | `PUT` / `DELETE /api/team/:id/days/:date/mark` | idem | idem |
 
-Same validation as the personal routes (shared code). An account the caller cannot read gives `404`; one that can be
+Same validation as the personal routes (shared code). `PATCH`, `DELETE` and the other admin writes answer `409` `changedMeanwhile` when the target account changed role between the read and the write (reload and retry); `409` `lastOwner` protects the last active owner. An account the caller cannot read gives `404`; one that can be
 read but not edited gives `403`. Rights are checked before the body is validated. Writing to one's **own** data through
 these routes follows `editOwn`.
 
@@ -276,9 +276,19 @@ account whose data changed (rebuilt from `before` for a deleted account); `displ
 | `user.token`, `user.unlock`, `user.delete` | old id for `user.delete` | `user.delete`: `before = { username, displayName, role }` |
 
 Nothing is logged when nothing changed (identical PATCH, repeated delete…). Hashes, tokens and passwords are never
-stored in the log. **Notifications** are created only for `punch.*` and `mark.*`: a change made by someone else (an
-admin, or the command line) notifies the data's owner; a `user` changing their own hours notifies every active owner
-and admin; owners and admins editing their own hours notify nobody. Neither the log nor the notifications are purged
+stored in the log. **Notifications** are created for `punch.*`, `mark.*` and a few account actions:
+
+| Event | Notified |
+|---|---|
+| `punch.*` / `mark.*` by someone other than the data's owner (admin, owner or command line) | the data's owner |
+| same, by a `user` on their own hours | every active owner and admin |
+| same, by an `admin` on their own hours | every active owner |
+| same, by an `owner` on their own hours | nobody |
+| `user.update` changing the **password**, the **role** or the **rights**, or `user.token`, made by someone else | the account concerned (for `user.token` the message asks them to update their phone or badge reader) |
+| any other `user.*` | nobody |
+
+In the log, `actor: null` with `source: "web"` means the author's account has since been deleted; `source: "cli"` is the
+command line. Neither the log nor the notifications are purged
 automatically.
 
 ## Admin endpoints (capability `manageUsers`)

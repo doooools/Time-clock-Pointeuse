@@ -226,8 +226,9 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
 - **Change log and notifications** (`server/audit.ts`): every successful mutation of punches, marks or accounts calls
   `recordChange(db, entry)` after the write (not atomic with it: a failure is logged with `console.error`, never turned
   into a 500). It inserts the `audit_log` row and, for `punch.*` / `mark.*` only, the notifications: the data's owner when
-  someone else (admin or CLI) acted; every active owner and admin when a `user` edited their own hours; nobody when an
-  owner or admin edited their own. No entry when nothing changed. The webhook and own settings are not logged.
+  someone else (admin, owner or CLI) acted; every active owner and admin when a `user` edited their own hours; every
+  active owner when an `admin` did; nobody when an owner did. `user.update` (password, role or rights) and `user.token`
+  made by someone else notify the account concerned; other `user.*` actions notify nobody. No entry when nothing changed. The webhook and own settings are not logged.
   Routes: `server/routes/journal.ts` (`/api/journal`, `/api/notifications`), `server/routes/presence.ts`
   (`/api/team/presence`), `server/routes/team.ts` (`/api/team…`), `server/punches.ts` (`dataWriteRoutes`: the punch and
   mark mutations, mounted once for the signed-in account under `/api` and once for a member under `/api/team/:id`, so

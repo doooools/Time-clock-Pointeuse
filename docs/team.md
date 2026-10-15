@@ -72,10 +72,10 @@ with its own token is the intended setup ([integrations/shared-badge-reader.md](
 The **Team** link appears in the navigation for anyone who may use it (superadmin and admin, and users with
 `view-team` or `view-presence`; a superadmin who is alone sees it too, to add the first person).
 
-- **Who is in**: for each active account, present or not, since when, and the last punch. "Today" is cut in each
+- **Who is in**: for each active account, present or not, since when, and the last punch (only if it is from today or yesterday). "Today" is cut in each
   person's own time zone. Refreshes by itself every minute. Needs `view-presence` (or admin).
 - **Members**: the list of accounts. With `view-team`, a member opens their hours: *Today*, *History* and *Stats* pages,
-  with a banner "You are viewing X's hours". For a `user` this is **read only**; an owner or admin can correct
+  with a banner "You are viewing X's hours". For a `user` this is **read only**, and it includes the hours of admins and superadmins (not only other users); a colleague without a display name appears as "Member #id", and the login name is shown only to managers; an owner or admin can correct
   (admins: `user` accounts only), and the banner says so.
 - **Account actions**: described above, for those who may manage.
 - A privacy note reminds everyone who sees what.
@@ -105,13 +105,15 @@ Who reads it: everyone sees the entries about **their own** hours; owners and ad
 |---|---|
 | an admin or superadmin changes **someone else's** hours (or the command line does) | the person whose hours changed |
 | a `user` changes **their own** hours | every active superadmin and admin |
-| a superadmin or admin changes their own hours | nobody |
+| an admin changes their own hours | every active superadmin |
+| a superadmin changes their own hours | nobody |
+| an admin or superadmin resets someone's **password**, changes their **role** or **rights**, or regenerates their **webhook token** | that person (for the token: "update your phone or badge reader") |
 
 A notification is a window that opens in the app with the list of changes, grouped by author, each with a link to the
 day. It is **persistent**: it stays across sessions and devices and closes only with the *Got it* ("J'ai compris" in French) button
 (not with Escape or a click outside), which acknowledges everything displayed. New ones are looked for on load, every
 minute and when the tab regains focus. There is no approval workflow: a correction applies immediately and is
-recorded. The log and the notifications are not purged automatically.
+recorded. The log and the notifications are **never purged automatically**: they grow with use, so plan to archive or clean them yourself if the database gets large. When an author's account has been deleted the log says "deleted account"; command-line changes say "command line".
 
 ## Privacy
 

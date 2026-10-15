@@ -13,6 +13,7 @@ export const journal = {
   loadMore: "Afficher plus",
   by: "par {actor}",
   byCli: "ligne de commande",
+  byDeleted: "compte supprimé",
   onAccount: "sur le compte de {name}",
   viewDay: "voir le jour",
 
@@ -25,14 +26,17 @@ export const journal = {
   punchRestore: "a rétabli le pointage de {time} le {date}",
   punchImport_one: "a importé {count} pointage",
   punchImport_other: "a importé {count} pointages",
-  markSet: "a posé : {type}",
-  markSetHalf: "a posé : {type} ({half})",
-  markClear: "a retiré le marquage",
+  markSet: "a posé le {date} : {type}",
+  markSetHalf: "a posé le {date} : {type} ({half})",
+  markClear: "a retiré le marquage du {date}",
   userCreate: "a créé le compte",
   userUpdate: "a modifié le compte",
   userToken: "a régénéré le jeton du webhook",
   userUnlock: "a déverrouillé le compte",
   userDelete: "a supprimé le compte",
+  userPassword: "a réinitialisé votre mot de passe",
+  userRole: "a changé votre rôle : {role}",
+  userRights: "a modifié vos droits",
   unknownAction: "a effectué l'action « {action} »",
 
   // describeChange: detail lines
@@ -48,6 +52,7 @@ export const journal = {
   linePasswordReset: "Mot de passe réinitialisé",
   lineUsername: "Identifiant : {username}",
   lineRole: "Rôle : {role}",
+  lineTokenReminder: "Pensez à mettre à jour votre téléphone ou votre badgeuse.",
 
   halfAm: "matin",
   halfPm: "après-midi",

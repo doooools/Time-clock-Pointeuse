@@ -63,7 +63,8 @@ export type Capabilities = {
   editOwn: boolean;
 };
 
-export type User = { id: number; username: string; displayName: string | null; role: Role };
+/** `username` is absent when a plain `user` looks at a colleague. */
+export type User = { id: number; username?: string; displayName: string | null; role: Role };
 
 /** The signed-in account as `/api/me` returns it. */
 export type CurrentUser = User & { permissions: Permissions; capabilities: Capabilities };
