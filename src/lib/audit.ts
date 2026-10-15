@@ -116,8 +116,19 @@ function describeMark(e: AuditEntryView, t: TFn): ChangeDescription {
   return { title, lines, date };
 }
 
-function describeUser(e: AuditEntryView, t: TFn): ChangeDescription {
+const RIGHTS = ["editOwn", "viewPresence", "viewTeam"];
+
+/** `user.update` diff with the nested `permissions` object flattened (the flat form is accepted too). */
+function flatten(side: unknown): Obj {
+  const { permissions, ...rest } = obj(side);
+  return { ...rest, ...obj(permissions) };
+}
+
+function describeUser(e: AuditEntryView, t: TFn, viewerId?: number | null): ChangeDescription {
   const lines: string[] = [];
+  // Wording depends on the reader: "your password" for the account concerned, "X's password" otherwise.
+  const mine = viewerId != null && e.subject.id === viewerId;
+  const name = e.subject.displayName;
   switch (e.action) {
     case "user.create": {
       const after = obj(e.after);
@@ -127,15 +138,15 @@ function describeUser(e: AuditEntryView, t: TFn): ChangeDescription {
       return { title: t("journal.userCreate"), lines };
     }
     case "user.token":
-      lines.push(t("journal.lineTokenReminder"));
-      return { title: t("journal.userToken"), lines };
+      if (mine) lines.push(t("journal.lineTokenReminder"));
+      return { title: mine ? t("journal.userToken") : t("journal.userTokenOther", { name }), lines };
     case "user.unlock":
       return { title: t("journal.userUnlock"), lines };
     case "user.delete":
       return { title: t("journal.userDelete"), lines };
     default: {
-      const before = obj(e.before);
-      const after = obj(e.after);
+      const before = flatten(e.before);
+      const after = flatten(e.after);
       for (const field of Object.keys(after)) {
         if (field === "password") {
           lines.push(t("journal.linePasswordReset"));
@@ -146,11 +157,12 @@ function describeUser(e: AuditEntryView, t: TFn): ChangeDescription {
         else lines.push(t("journal.lineFieldSet", { field: label, to: plain(t, field, after[field]) }));
       }
       const keys = Object.keys(after);
-      const rights = keys.filter((k) => k === "editOwn" || k === "viewPresence" || k === "viewTeam");
+      const rights = keys.filter((k) => RIGHTS.includes(k));
       let title = t("journal.userUpdate");
-      if (keys.length === 1 && keys[0] === "password") title = t("journal.userPassword");
-      else if (keys.length === 1 && keys[0] === "role") title = t("journal.userRole", { role: role(t, after.role) });
-      else if (rights.length && rights.length === keys.length) title = t("journal.userRights");
+      if (keys.length === 1 && keys[0] === "password") title = mine ? t("journal.userPassword") : t("journal.userPasswordOther", { name });
+      else if (keys.length === 1 && keys[0] === "role") {
+        title = mine ? t("journal.userRole", { role: role(t, after.role) }) : t("journal.userRoleOther", { name, role: role(t, after.role) });
+      } else if (rights.length && rights.length === keys.length) title = mine ? t("journal.userRights") : t("journal.userRightsOther", { name });
       return { title, lines };
     }
   }
@@ -162,8 +174,8 @@ export function authorLabel(entry: AuditEntryView, t: TFn): string {
   return entry.source === "cli" ? t("journal.byCli") : t("journal.byDeleted");
 }
 
-/** Describes a change in the language of `t`; clock times and days are rendered in the time zone `tz` of the data owner. */
-export function describeChange(entry: AuditEntryView, t: TFn, tz: string): ChangeDescription {
+/** Describes a change in the language of `t` for the reader `viewerId` (account-level wording); clock times and days are rendered in the time zone `tz` of the data owner. */
+export function describeChange(entry: AuditEntryView, t: TFn, tz: string, viewerId?: number | null): ChangeDescription {
   switch (entry.action) {
     case "punch.create":
     case "punch.update":
@@ -189,7 +201,7 @@ export function describeChange(entry: AuditEntryView, t: TFn, tz: string): Chang
     case "user.token":
     case "user.unlock":
     case "user.delete":
-      return describeUser(entry, t);
+      return describeUser(entry, t, viewerId);
     default:
       return { title: t("journal.unknownAction", { action: String((entry as { action: string }).action) }), lines: [] };
   }

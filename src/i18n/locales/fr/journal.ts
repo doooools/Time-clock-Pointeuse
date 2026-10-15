@@ -31,12 +31,16 @@ export const journal = {
   markClear: "a retiré le marquage du {date}",
   userCreate: "a créé le compte",
   userUpdate: "a modifié le compte",
-  userToken: "a régénéré le jeton du webhook",
+  userToken: "a régénéré votre jeton du webhook",
+  userTokenOther: "a régénéré le jeton du webhook de {name}",
   userUnlock: "a déverrouillé le compte",
   userDelete: "a supprimé le compte",
   userPassword: "a réinitialisé votre mot de passe",
   userRole: "a changé votre rôle : {role}",
   userRights: "a modifié vos droits",
+  userPasswordOther: "a réinitialisé le mot de passe de {name}",
+  userRoleOther: "a changé le rôle de {name} : {role}",
+  userRightsOther: "a modifié les droits de {name}",
   unknownAction: "a effectué l'action « {action} »",
 
   // describeChange: detail lines

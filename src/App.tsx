@@ -295,6 +295,8 @@ function Main({ onUnauthorized }: { onUnauthorized: () => void }) {
   const me = useMe();
   const subjectId = useSubjectId();
   const { pathname, search } = useLocation();
+  // No right on the team at all: /team and /team/:id lead nowhere, go home silently.
+  if ((pathname === "/team" || pathname.startsWith("/team/")) && !showsTeam(me.capabilities)) return <Navigate to="/" replace />;
   if (subjectId === "invalid") return <Navigate to="/team" replace />;
   // My own id in a member URL: the same page on my data.
   if (subjectId === me.id) return <Navigate to={(pathname.replace(/^\/team\/\d+/, "") || "/") + search} replace />;

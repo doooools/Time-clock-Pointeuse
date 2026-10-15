@@ -131,7 +131,7 @@ function Dialog({ items, onDismissed }: { items: NotificationView[]; onDismissed
               </h3>
               <ul className="flex flex-col gap-2.5">
                 {g.items.map(({ id, entry }) => {
-                  const d = describeChange(entry, t, tz);
+                  const d = describeChange(entry, t, tz, me.id);
                   const otherSubject = entry.subject.id !== me.id && entry.subject.id !== entry.actor?.id;
                   const madeOn = dayKey(entry.at, tz);
                   return (

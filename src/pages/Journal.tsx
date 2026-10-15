@@ -121,7 +121,7 @@ export default function Journal() {
       {entries && entries.length > 0 && (
         <ul className="flex flex-col">
           {entries.map((entry) => {
-            const d = describeChange(entry, t, tz);
+            const d = describeChange(entry, t, tz, me.id);
             const actor = entry.actor ? userLabel(entry.actor) : authorLabel(entry, t);
             const otherAccount = entry.subject.id !== me.id;
             return (
