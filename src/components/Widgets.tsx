@@ -1,4 +1,5 @@
 import { useRef, type CSSProperties, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import type { DayMark, DayResult, MarkType } from "../../shared/compute";
 import { fmtDuration } from "../../shared/format";
 import { formatClock, minutesOfDay } from "../../shared/time";
@@ -216,6 +217,43 @@ export function DayTypeBadge({ day, className }: { day: Pick<DayResult, "mark" |
   return <span className={cx("inline-block px-2 py-0.5 font-label uppercase", style, className)}>{text}</span>;
 }
 
+/* ─────────────── Empty state ─────────────── */
+
+/** Welcoming block for a page without data: tilted "?", title, text and the two ways to get punches in. */
+export function EmptyState({
+  text,
+  title,
+  heading: Heading = "h2",
+  children,
+}: {
+  text: ReactNode;
+  title?: ReactNode;
+  heading?: "h1" | "h2";
+  children?: ReactNode;
+}) {
+  const t = useT();
+  return (
+    <div className="flex flex-col items-start gap-7 py-10 lg:flex-row lg:items-center lg:py-20">
+      <div aria-hidden className="-rotate-[5deg] bg-yellow px-[22px] py-1.5 font-display text-[120px] leading-none text-onpaper">
+        ?
+      </div>
+      <div className="flex max-w-[480px] flex-col gap-3">
+        <Heading className="font-display text-[30px] tracking-[.02em]">{title ?? t("common.emptyTitle")}</Heading>
+        <p className="leading-[1.45] text-pretty text-paper-soft">{text}</p>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/settings#tuto" className="btn-primary px-3.5 py-2 text-[15px]">
+            {t("common.emptySetup")}
+          </Link>
+          <Link to="/data" className="btn-secondary px-3.5 py-2 text-[15px]">
+            {t("common.emptyImport")}
+          </Link>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────── Day ribbon ─────────────── */
 
 type Tick = { at: number; label: string; prio: number; now?: boolean };
@@ -361,6 +399,7 @@ export function WeekStrip({
   onPick?: (date: string) => void;
 }) {
   const { workdays } = useStore().settings;
+  const { locale } = useLocale();
   const isRest = (i: number) => !workdays.includes(i + 1);
   // Compact: rest days get narrower columns.
   const columns = compact ? week.map((_, i) => (isRest(i) ? ".6fr" : "1fr")).join(" ") : undefined;
@@ -370,7 +409,7 @@ export function WeekStrip({
       style={columns ? { gridTemplateColumns: columns } : undefined}
     >
       {week.map((d, i) => {
-        const name = compact ? dayLetter(i + 1) : dayShort(i + 1).toUpperCase();
+        const name = compact ? dayLetter(locale, i + 1) : dayShort(locale, i + 1).toUpperCase();
         const rest = isRest(i);
         const quiet = !d || d.isFuture || (rest && d.workedMin === 0);
         // Days before the balance start date are shown without a delta.
@@ -406,7 +445,7 @@ export function WeekStrip({
           );
         if (quiet)
           return cell(
-            cx("text-grey", compact ? "p-[5px]" : "p-2", !rest && "outline-2 -outline-offset-2 outline-dashed outline-grey/60"),
+            cx("text-paper-dim", compact ? "p-[5px]" : "p-2", !rest && "outline-2 -outline-offset-2 outline-dashed outline-grey/60"),
             "hover:text-paper-muted hover:outline-paper-muted",
             <>
               {name}

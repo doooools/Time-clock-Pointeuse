@@ -3,12 +3,12 @@ import { Link } from "react-router-dom";
 import { coversMidday, lunchBreak, monthlySummaries, weeklySummaries, type DayResult, type LunchBreak } from "../../shared/compute";
 import { addDays, dayKey, isoWeek, minutesOfDay, parseDayKey, weekStart } from "../../shared/time";
 import { Chart, PK, type ChartOption } from "../components/charts/Chart";
-import { dayLabel as dayLabelIn, fullDate, monthShort, monthYear, shortDate, weekdayShort } from "../components/charts/intl";
+import { dayLabel as dayLabelIn, dayShort, fullDate, monthLabel, monthShort, shortDate } from "../lib/dates";
 import { useLocale, useT } from "../i18n";
-import { arrowOf, cx, dayTypeText, Kpi, Segmented, toneOf } from "../components/Widgets";
+import { arrowOf, cx, dayTypeText, EmptyState, Kpi, Segmented, toneOf } from "../components/Widgets";
 import { dur, hmOfMinutes, signed } from "../lib/fmt";
 import { useIsDesktop } from "../lib/media";
-import { useStore } from "../lib/store";
+import { useNow, useStore } from "../lib/store";
 import { useOpenDay } from "../lib/viewDay";
 
 const PERIODS = [
@@ -59,6 +59,9 @@ function Block({ title, aside, children, className }: { title: ReactNode; aside?
   );
 }
 
+/** Heatmap cell colour for a ratio 0..1 (6h → 9h worked), built from the CSS tokens. */
+const heat = (ratio: number) => `color-mix(in oklch, var(--color-heat-low), var(--color-yellow) ${Math.round(ratio * 100)}%)`;
+
 /** 53 × 7 yearly calendar in HTML (dark yellow → bright yellow by time worked). */
 function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; today: string; onPick: (date: string) => void }) {
   const t = useT();
@@ -81,8 +84,8 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
       aside={
         <span className="flex items-center gap-3.5">
           {t("stats.heatmap_less")}
-          <span className="block h-3.5 w-3.5 bg-[oklch(0.4_0.06_100)]" />
-          <span className="block h-3.5 w-3.5 bg-[oklch(0.64_0.115_100)]" />
+          <span className="block h-3.5 w-3.5 bg-heat-low" />
+          <span className="block h-3.5 w-3.5" style={{ background: heat(0.5) }} />
           <span className="block h-3.5 w-3.5 bg-yellow" /> {t("stats.heatmap_more")} ·
           <span className="block h-3.5 w-3.5 bg-blue-heat" /> {t("stats.heatmap_absence")}
         </span>
@@ -94,7 +97,7 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
             <div className="grid grid-rows-7 gap-[3px] text-[11px] text-paper-dim">
               {[1, 0, 3, 0, 5, 0, 7].map((wd, i) => (
                 <span key={i} className="leading-[18px]">
-                  {wd ? weekdayShort(locale, wd).replace(/\.$/, "").toLowerCase() : ""}
+                  {wd ? dayShort(locale, wd).toLowerCase() : ""}
                 </span>
               ))}
             </div>
@@ -102,18 +105,17 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
               {cells.map((date) => {
                 const d = byDate.get(date);
                 const future = date > today;
-                let bg = "oklch(0.19 0 0)";
+                let bg = "var(--color-coal)";
                 const absent = d && d.workedMin === 0 && (d.mark || d.holiday);
                 if (future) bg = "transparent";
                 else if (absent) bg = "var(--color-blue-heat)";
                 else if (d && d.workedMin > 0) {
-                  const t = Math.max(0, Math.min(1, (d.workedMin - 360) / 180));
-                  bg = `oklch(${(0.4 + 0.48 * t).toFixed(2)} ${(0.06 + 0.11 * t).toFixed(3)} 100)`;
+                  bg = heat(Math.max(0, Math.min(1, (d.workedMin - 360) / 180)));
                 }
                 const label = `${dayLabelIn(locale, date)}/${date.slice(0, 4)} · ${
                   d ? (d.workedMin > 0 ? dur(d.workedMin) : (dayTypeText(d) ?? "—")) : "—"
                 }`;
-                const cls = cx("box-border", future && "border border-dashed border-[oklch(0.3_0_0)]", date === today && "outline-2 outline-pink");
+                const cls = cx("box-border", future && "border border-dashed border-line", date === today && "outline-2 outline-pink");
                 return future ? (
                   <div key={date} className={cls} />
                 ) : (
@@ -152,7 +154,8 @@ export default function Stats() {
   const desktop = useIsDesktop();
   const [period, setPeriod] = useState<Period>("1a");
   const tz = settings.timezone;
-  const today = dayKey(Date.now(), tz);
+  const now = useNow(60_000);
+  const today = dayKey(now, tz);
   const target = settings.dailyTargetMin;
   const openDay = useOpenDay();
 
@@ -181,9 +184,11 @@ export default function Stats() {
       best,
       delta: days.reduce((a, d) => a + (d.inBalance ? d.deltaMin : 0), 0),
     };
-  }, [days, worked, complete]);
+  }, [days, worked, complete, tz]);
 
 
+  const counted = useMemo(() => days.filter((d) => d.inBalance), [days]);
+  const outOfBalance = t("stats.tip_out_of_balance");
   const balanceOpt: ChartOption = useMemo(
     () => ({
       grid: desktop ? grid : { left: 44, right: 8, top: 8, bottom: 24 },
@@ -192,6 +197,7 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const d = days[ps[0].dataIndex];
+          if (!d.inBalance) return `${dayLabelIn(locale, d.date)}<br/>${outOfBalance}${hint}`;
           return `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_balance")} <b>${signed(d.balanceMin)}</b><br/>${t("stats.tip_day")} ${signed(d.deltaMin)}${hint}`;
         },
       },
@@ -200,15 +206,15 @@ export default function Stats() {
       series: [
         {
           type: "line",
-          data: days.map((d) => hours(d.balanceMin)),
+          data: days.map((d) => (d.inBalance ? hours(d.balanceMin) : "-")),
           showSymbol: false,
-          lineStyle: { width: 1, color: splitGradient(days.map((d) => d.balanceMin)) },
-          areaStyle: { opacity: 1, color: splitGradient(days.map((d) => d.balanceMin)) },
+          lineStyle: { width: 1, color: splitGradient(counted.map((d) => d.balanceMin)) },
+          areaStyle: { opacity: 1, color: splitGradient(counted.map((d) => d.balanceMin)) },
           markLine: { silent: true, symbol: "none", lineStyle: { color: PK.paper, width: 2, type: "solid" }, label: { show: false }, data: [{ yAxis: 0 }] },
         },
       ],
     }),
-    [days, desktop, locale, t, hint],
+    [days, counted, desktop, locale, t, hint, outOfBalance],
   );
 
   const dailyDays = days.filter((d) => d.targetMin > 0 || d.workedMin > 0);
@@ -220,7 +226,8 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const d = dailyDays[ps[0].dataIndex];
-          return `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_worked")} <b>${dur(d.workedMin)}</b><br/>${t("stats.tip_gap")} ${signed(d.deltaMin)}${hint}`;
+          const gap = d.inBalance ? `${t("stats.tip_gap")} ${signed(d.deltaMin)}` : outOfBalance;
+          return `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_worked")} <b>${dur(d.workedMin)}</b><br/>${gap}${hint}`;
         },
       },
       xAxis: { type: "category", data: dailyDays.map((d) => shortDate(d.date)) },
@@ -231,7 +238,7 @@ export default function Stats() {
           barCategoryGap: "8%",
           data: dailyDays.map((d) => ({
             value: hours(d.workedMin),
-            itemStyle: { color: d.date === today ? PK.pink : d.workedMin >= target ? PK.yellow : PK.dim },
+            itemStyle: { color: d.date === today ? PK.pink : !d.inBalance ? PK.grey : d.workedMin >= target ? PK.yellow : PK.dim },
           })),
           markLine: {
             silent: true,
@@ -244,11 +251,21 @@ export default function Stats() {
       ],
       dataZoom: dailyDays.length > 120 ? [{ type: "inside", startValue: dailyDays.length - 120 }] : [],
     }),
-    [dailyDays, target, today, locale, t, hint],
+    [dailyDays, target, today, locale, t, hint, outOfBalance],
   );
 
-  const weeks = weeklySummaries(days);
-  const weekExtremes = weeks.length ? [Math.max(...weeks.map((w) => w.deltaMin)), Math.min(...weeks.map((w) => w.deltaMin))] : [0, 0];
+  const weeks = useMemo(
+    () =>
+      weeklySummaries(days).map((w) => {
+        const inWeek = days.filter((d) => d.date >= w.from && d.date <= w.to && d.inBalance && !d.isFuture);
+        return inWeek.length ? { ...w, deltaMin: inWeek.reduce((a, d) => a + d.deltaMin, 0), counted: true } : { ...w, counted: false };
+      }),
+    [days],
+  );
+  const countedWeeks = weeks.filter((w) => w.counted);
+  const weekExtremes = countedWeeks.length
+    ? [Math.max(...countedWeeks.map((w) => w.deltaMin)), Math.min(...countedWeeks.map((w) => w.deltaMin))]
+    : [0, 0];
   const weeklyOpt: ChartOption = useMemo(
     () => ({
       grid: desktop ? grid : { left: 44, right: 8, top: 8, bottom: 24 },
@@ -257,7 +274,8 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const w = weeks[ps[0].dataIndex];
-          return `${t("stats.tip_week", { week: isoWeek(w.key).week, from: shortDate(w.from), to: shortDate(w.to) })}<br/>${t("stats.tip_worked")} <b>${dur(w.workedMin)}</b> / ${dur(w.targetMin)}<br/>${t("stats.tip_gap")} ${signed(w.deltaMin)}`;
+          const gap = w.counted ? `${t("stats.tip_gap")} ${signed(w.deltaMin)}` : outOfBalance;
+          return `${t("stats.tip_week", { week: isoWeek(w.key).week, from: shortDate(w.from), to: shortDate(w.to) })}<br/>${t("stats.tip_worked")} <b>${dur(w.workedMin)}</b> / ${dur(w.targetMin)}<br/>${gap}`;
         },
       },
       xAxis: { type: "category", data: weeks.map((w) => t("stats.week_short", { week: isoWeek(w.key).week })), axisLine: { show: false } },
@@ -267,12 +285,12 @@ export default function Stats() {
           type: "bar",
           barCategoryGap: "10%",
           barMaxWidth: 64,
-          data: weeks.map((w) => ({ value: hours(w.deltaMin), itemStyle: { color: w.deltaMin >= 0 ? PK.yellow : PK.red } })),
+          data: weeks.map((w) => ({ value: hours(w.deltaMin), itemStyle: { color: !w.counted ? PK.grey : w.deltaMin >= 0 ? PK.yellow : PK.red } })),
           markLine: { silent: true, symbol: "none", lineStyle: { color: PK.paper, width: 2, type: "solid" }, label: { show: false }, data: [{ yAxis: 0 }] },
         },
       ],
     }),
-    [weeks, desktop, t],
+    [weeks, desktop, t, outOfBalance],
   );
 
   const months = monthlySummaries(days);
@@ -284,7 +302,7 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const m = months[ps[0].dataIndex];
-          return `${monthYear(locale, m.key)}<br/>${t("stats.tip_worked")} <b>${dur(m.workedMin)}</b><br/>${t("stats.tip_target")} ${dur(m.targetMin)}<br/>${t("stats.tip_gap")} ${signed(m.deltaMin)}`;
+          return `${monthLabel(locale, m.key)}<br/>${t("stats.tip_worked")} <b>${dur(m.workedMin)}</b><br/>${t("stats.tip_target")} ${dur(m.targetMin)}<br/>${t("stats.tip_gap")} ${signed(m.deltaMin)}`;
         },
       },
       xAxis: { type: "category", data: months.map((m) => monthShort(locale, Number(m.key.slice(5)))) },
@@ -423,7 +441,7 @@ export default function Stats() {
     const buckets = Array.from({ length: (hi - lo) / 15 }, (_, i) => ({ from: lo + i * 15, n: 0 }));
     for (const m of starts) buckets[Math.floor((m - lo) / 15)].n++;
     return buckets;
-  }, [lunch]);
+  }, [lunch, tz]);
   const lunchStartsOpt: ChartOption = useMemo(() => {
     const top = Math.max(...lunchStarts.map((b) => b.n));
     return {
@@ -458,6 +476,15 @@ export default function Stats() {
   }, [worked]);
 
   const empty = worked.length < 5;
+  const hasHistory = useMemo(() => allDays.filter((d) => d.workedMin > 0).length >= 5, [allDays]);
+
+  if (!hasHistory)
+    return (
+      <div className="flex flex-col">
+        <h1 className="page-title mt-5 self-start lg:mt-9">{t("stats.title")}</h1>
+        <EmptyState text={t("stats.empty_text")} />
+      </div>
+    );
 
   return (
     <div className="flex flex-col">
@@ -489,12 +516,12 @@ export default function Stats() {
 
       {empty ? (
         <div className="flex flex-col gap-4 pt-10">
-          <div className="flex h-[120px] items-center justify-center border-b-2 border-l-2 border-[oklch(0.5_0_0)]">
-            <span className="-rotate-2 border-2 border-dashed border-[oklch(0.5_0_0)] px-3.5 py-2 font-label text-lg text-paper-muted">
+          <div className="flex h-[120px] items-center justify-center border-b-2 border-l-2 border-grey">
+            <span className="-rotate-2 border-2 border-dashed border-grey px-3.5 py-2 font-label text-lg text-paper-muted">
               {t("stats.empty_days", { count: worked.length })}
             </span>
           </div>
-          <div className="flex flex-wrap gap-3 text-[15px] text-[oklch(0.82_0.01_90)]">
+          <div className="flex flex-wrap gap-3 text-[15px] text-paper-soft">
             {t("stats.empty_hint")}
             <Link to="/data" className="font-label text-yellow hover:text-pink">
               {t("stats.empty_import")}
@@ -507,9 +534,9 @@ export default function Stats() {
             className="pt-5 lg:pt-10"
             title={t("stats.balance_title")}
             aside={t("stats.balance_aside", {
-              max: signed(Math.max(0, ...days.map((d) => d.balanceMin))),
-              min: signed(Math.min(0, ...days.map((d) => d.balanceMin))),
-              today: signed(days[days.length - 1]?.balanceMin ?? 0),
+              max: signed(Math.max(0, ...counted.map((d) => d.balanceMin))),
+              min: signed(Math.min(0, ...counted.map((d) => d.balanceMin))),
+              today: signed(days[days.length - 1]?.balanceMin ?? settings.initialBalanceMin),
             })}
           >
             <Chart option={balanceOpt} height={desktop ? 240 : 150} onPick={(i) => days[i] && openDay(days[i].date)} />
@@ -540,10 +567,10 @@ export default function Stats() {
               <div className="flex flex-col gap-2.5">
                 {weekdays.rows.map((r) => (
                   <div key={r.wd} className="grid grid-cols-[44px_1fr_96px] items-center gap-3 text-[15px]">
-                    <span className="font-label">{weekdayShort(locale, r.wd).replace(/\.$/, "").toLowerCase()}</span>
-                    <div className="relative h-[22px] bg-[oklch(0.18_0_0)]">
+                    <span className="font-label">{dayShort(locale, r.wd).toLowerCase()}</span>
+                    <div className="relative h-[22px] bg-shade">
                       <div
-                        className={cx("absolute inset-y-0 left-0", r.wd >= 6 ? "bg-paper-dim" : "bg-yellow")}
+                        className={cx("absolute inset-y-0 left-0", settings.workdays.includes(r.wd) ? "bg-yellow" : "bg-paper-dim")}
                         style={{ width: `${(r.avg / weekdays.scale) * 100}%` }}
                       />
                       <div

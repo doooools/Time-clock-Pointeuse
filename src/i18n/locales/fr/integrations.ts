@@ -9,8 +9,6 @@ export const integrations = {
   tab_android: "Android (Tasker + NFC)",
   tab_ios: "iPhone (Raccourcis)",
   tab_http: "HTTP / autre",
-  steps_one: "{count} étape",
-  steps_other: "{count} étapes",
   trouble_label: "ça ne marche pas ?",
   security_label: "sécurité et variantes",
   docs_hint: "Les mêmes guides, plus la badgeuse murale partagée (ESP32 + RC522), sont dans le dossier docs/integrations du dépôt.",

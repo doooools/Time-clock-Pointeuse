@@ -5,7 +5,6 @@ export const settings: Record<keyof typeof fr, string> = {
   // Rules
   rulesTitle: "HOUSE RULES",
   targetLabel: "daily target",
-  targetAria: "Daily target",
   perWeekBefore: "that is",
   perWeekAfter: "per week",
   formatError: "✕ Expected format: 7h18",

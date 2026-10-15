@@ -19,13 +19,13 @@ export const stats: Record<keyof typeof fr, string> = {
   days_short: "{count} d",
   percent: "{value}%",
 
+  tip_out_of_balance: "not counted (before the balance start)",
   tip_balance: "balance",
   tip_day: "day",
   tip_worked: "worked",
   tip_gap: "gap",
   tip_target: "target",
   tip_week: "week {week} ({from} → {to})",
-  tip_lunch: "lunch break",
   tip_break: "break",
   tip_no_break: "no break",
   tip_exit: "out",
@@ -59,6 +59,7 @@ export const stats: Record<keyof typeof fr, string> = {
   empty_days_one: "{count} day with punches: you need 5 to draw anything",
   empty_days_other: "{count} days with punches: you need 5 to draw anything",
   empty_hint: "Pick a longer period or",
+  empty_text: "Charts show up after 5 punched days: set up your phone or import your history.",
   empty_import: "import your history →",
 
   balance_title: "RUNNING BALANCE · yellow = ahead, red = behind",

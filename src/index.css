@@ -25,6 +25,7 @@
   --color-grey: oklch(0.45 0 0);
   --color-line: oklch(0.28 0 0);
   --color-coal: oklch(0.2 0 0);
+  --color-shade: oklch(0.18 0 0); /* row hover, empty bar track */
   --color-yellow: oklch(0.88 0.17 100);
   --color-yellow-hover: oklch(0.92 0.15 100);
   --color-red: oklch(0.6 0.22 27);
@@ -34,6 +35,7 @@
   --color-pink-hover: oklch(0.8 0.17 350);
   --color-blue: oklch(0.45 0.16 262);
   --color-blue-heat: oklch(0.36 0.1 262);
+  --color-heat-low: oklch(0.4 0.06 100); /* heatmap: short day (mixed towards yellow for long days) */
   --color-tape: oklch(0.9 0.05 90 / 0.7);
 
   --shadow-toast: 6px 6px 0 var(--color-black);

@@ -3,7 +3,6 @@ export const settings = {
   // Rules
   rulesTitle: "RÈGLES DU JEU",
   targetLabel: "objectif journalier",
-  targetAria: "Objectif journalier",
   perWeekBefore: "soit",
   perWeekAfter: "par semaine",
   formatError: "✕ Format attendu : 7h18",

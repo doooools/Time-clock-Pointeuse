@@ -20,15 +20,16 @@ import {
   cx,
   DayTypeBadge,
   Delta,
+  EmptyState,
   Kpi,
   Stamp,
   toneOf,
 } from "../components/Widgets";
-import { dayLabel as dayLabelIn, monthName as monthNameIn, monthShort, monthShortYear, shortDate, weekdayLong } from "../components/charts/intl";
 import { useLocale, useT, type TFn } from "../i18n";
-import { parseHm, shiftMonth } from "../lib/dates";
+import { dayLabel as dayLabelIn, dayName, isMonthKey, monthName as monthNameIn, monthShort, monthShortLabel, parseHm, shiftMonth, shortDate } from "../lib/dates";
 import { dur, signed } from "../lib/fmt";
 import { useIsDesktop } from "../lib/media";
+import { useModal } from "../lib/modal";
 import { useNow, useStore } from "../lib/store";
 import { useToast } from "../lib/toast";
 import { useOpenDay } from "../lib/viewDay";
@@ -62,7 +63,7 @@ function PunchChips({ day, className }: { day: DayResult; className?: string }) 
             <span className="font-label text-[11px]">{t("history.not_counted")}</span>
           </span>
         ) : (
-          <span key={p.id} className="inline-flex items-baseline gap-1.5 border-[1.5px] border-[oklch(0.55_0.01_90)] px-2 py-0.5" title={sourceLabel(t, p)}>
+          <span key={p.id} className="inline-flex items-baseline gap-1.5 border-[1.5px] border-paper-dim px-2 py-0.5" title={sourceLabel(t, p)}>
             <span className="font-label text-[11px] text-paper-muted">{sens}</span>
             {formatClock(p.ts, tz)}
           </span>
@@ -111,6 +112,7 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
   const [half, setHalf] = useState<Half>(halfOf(day.mark));
   const [busy, setBusy] = useState(false);
   const showDay = useOpenDay();
+  const sheetRef = useModal<HTMLDivElement>(onClose);
 
   useEffect(() => {
     setMarkType(day.mark?.type ?? "");
@@ -127,7 +129,7 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
 
   const newTs = newTime ? toTs(day.date, newTime, tz) : null;
   const nextIsIn = day.punches.length % 2 === 0;
-  const dayHeading = `${weekdayLong(locale, day.weekday).toUpperCase()} ${shortDate(day.date)}`;
+  const dayHeading = `${dayName(locale, day.weekday).toUpperCase()} ${shortDate(day.date)}`;
 
   async function save() {
     const edits = day.punches
@@ -147,6 +149,8 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
       }
       if (edits.length || changed) toast(t("history.day_saved", { day: dayLabel(day.date) }));
       onClose();
+    } catch {
+      /* already reported by the store */
     } finally {
       setBusy(false);
     }
@@ -276,9 +280,12 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
           );
         })}
       </div>
-      <p className="text-[13px] leading-snug text-[oklch(0.35_0_0)] lg:text-sm">
+      <p className="text-[13px] leading-snug text-onpaper-muted lg:text-sm">
         {t("history.duration_hint", {
-          state: markType === (day.mark?.type ?? "") && portion === (day.mark?.portion ?? 1) ? t("history.target_current") : t("history.target_after_save"),
+          state:
+            markType === (day.mark?.type ?? "") && portion === (day.mark?.portion ?? 1)
+              ? t("history.target_current")
+              : t("history.target_after_save"),
         })}{" "}
         <b>{dur(draftTarget)}</b>.
       </p>
@@ -295,13 +302,19 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
 
   if (sheet)
     return (
-      <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t("history.edit_aria", { day: dayLabel(day.date) })}>
-        <button aria-label={t("history.close_aria")} className="absolute inset-0 bg-[oklch(0.05_0_0/.7)]" onClick={onClose} />
+      <div
+        ref={sheetRef}
+        className="fixed inset-0 z-50 lg:hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("history.edit_aria", { day: dayLabel(day.date) })}
+      >
+        <button tabIndex={-1} aria-label={t("history.close_aria")} className="absolute inset-0 bg-black/70" onClick={onClose} />
         <div className="paper-card absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col gap-3.5 overflow-y-auto px-[18px] pt-3.5 pb-[max(24px,env(safe-area-inset-bottom))]">
           <div className="h-[5px] w-12 self-center bg-onpaper" />
           <div className="flex items-center justify-between gap-2">
             <button type="button" className={cx("font-display text-[28px] uppercase", DAY_LINK)} onClick={() => showDay(day.date)}>
-              {weekdayLong(locale, day.weekday)} {shortDate(day.date)} →
+              {dayName(locale, day.weekday)} {shortDate(day.date)} →
             </button>
             {day.anomalies.length > 0 && (
               <span className="-rotate-2 bg-yellow px-2 py-0.5 font-label text-xs">⚠ {day.anomalies.map((a) => ANOMALY_SHORT[a]).join(" · ")}</span>
@@ -315,7 +328,7 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
 
   return (
     <div className="paper-card mt-2.5 mb-4 grid -rotate-[.3deg] grid-cols-2 gap-10 px-7 py-6">
-      <div className="tape left-[60px] w-[100px] -rotate-3 bg-[oklch(0.88_0.17_100/.75)]" />
+      <div className="tape left-[60px] w-[100px] -rotate-3 bg-yellow/75" />
       {punchesBlock}
       {typeBlock}
     </div>
@@ -346,11 +359,7 @@ function ForgottenDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
     return { before, after, newId: -1 };
   }, [date, ts, byDay, marks, settings, days, now]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialogRef = useModal<HTMLDivElement>(onClose);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -359,6 +368,8 @@ function ForgottenDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
     try {
       await addPunch(ts);
       onAdded(date);
+    } catch {
+      /* already reported by the store */
     } finally {
       setBusy(false);
     }
@@ -368,15 +379,21 @@ function ForgottenDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
   const created = preview?.after ? preview.after.anomalies.filter((a) => !preview.before.anomalies.includes(a)) : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-3 pt-16 pb-24 lg:pt-[110px]" role="dialog" aria-modal="true" aria-labelledby="oubli-titre">
-      <button aria-label={t("history.close_aria")} className="fixed inset-0 bg-[oklch(0.05_0_0/.72)]" onClick={onClose} />
+    <div
+      ref={dialogRef}
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-3 pt-16 pb-24 lg:pt-[110px]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="forgot-title"
+    >
+      <button tabIndex={-1} aria-label={t("history.close_aria")} className="fixed inset-0 bg-black/70" onClick={onClose} />
       <form
         onSubmit={submit}
         className="paper-card flex w-full max-w-[560px] -rotate-[.6deg] flex-col gap-[18px] px-5 py-6 shadow-modal lg:px-8 lg:py-7"
       >
-        <div className="tape left-[70px] w-[110px] -rotate-[4deg] bg-[oklch(0.88_0.17_100/.8)]" />
+        <div className="tape left-[70px] w-[110px] -rotate-[4deg] bg-yellow/80" />
         <div className="flex items-center justify-between">
-          <span id="oubli-titre" className="font-display text-[28px] lg:text-[34px]">
+          <span id="forgot-title" className="font-display text-[28px] lg:text-[34px]">
             {t("history.forgot_title")}
           </span>
           <button type="button" aria-label={t("history.close_aria")} className="cursor-pointer text-[22px] font-bold" onClick={onClose}>
@@ -455,14 +472,15 @@ export default function History() {
   const t = useT();
   const { locale } = useLocale();
   const dayLabel = (date: string) => dayLabelIn(locale, date);
-  const monthName = (month: string) => monthNameIn(locale, month);
+  const monthName = (month: string) => monthNameIn(locale, Number(month.slice(5, 7)));
   const { days, byDay, marks, settings } = useStore();
   const tz = settings.timezone;
   const now = useNow(60_000);
   const desktop = useIsDesktop();
   const [params, setParams] = useSearchParams();
   const today = dayKey(now, tz);
-  const month = params.get("month") ?? monthKey(today);
+  const rawMonth = params.get("month");
+  const month = isMonthKey(rawMonth) ? rawMonth : monthKey(today);
   const [openDay, setOpenDay] = useState<string | null>(params.get("day"));
   const [onlyAnomalies, setOnlyAnomalies] = useState(params.get("anomalies") === "1");
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -523,6 +541,30 @@ export default function History() {
   const monthDelta = monthSum?.deltaMin ?? 0;
   const endBalance = monthSum?.endBalanceMin ?? 0;
 
+  const forgotDialog = forgotOpen && (
+    <ForgottenDialog
+      onClose={() => setForgotOpen(false)}
+      onAdded={(date) => {
+        setForgotOpen(false);
+        setParams({ month: monthKey(date), day: date });
+      }}
+    />
+  );
+
+  if (days.length === 0)
+    return (
+      <div className="flex flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-5 lg:pt-9">
+          <h1 className="page-title">{t("common.navHistory")}</h1>
+          <button className="btn-primary rotate-1" onClick={() => setForgotOpen(true)}>
+            {t("history.add_forgotten")}
+          </button>
+        </div>
+        <EmptyState text={t("history.empty_text")} />
+        {forgotDialog}
+      </div>
+    );
+
   return (
     <div className="flex flex-col">
       {/* Header */}
@@ -532,13 +574,13 @@ export default function History() {
             ‹<span className="hidden lg:inline">&nbsp;{monthName(shiftMonth(month, -1))}</span>
           </button>
           <h1 className="page-title">
-            <span className="lg:hidden">{monthShortYear(locale, month)}</span>
+            <span className="lg:hidden">{monthShortLabel(locale, month)}</span>
             <span className="hidden lg:inline">
               {monthName(month)} {month.slice(0, 4)}
             </span>
           </h1>
           <button
-            className="btn-secondary h-11 w-11 p-0 font-mono text-lg font-bold disabled:outline-[oklch(0.4_0_0)] lg:h-auto lg:w-auto lg:px-3.5 lg:py-2 lg:font-label lg:text-base lg:font-normal"
+            className="btn-secondary h-11 w-11 p-0 font-mono text-lg font-bold disabled:outline-grey lg:h-auto lg:w-auto lg:px-3.5 lg:py-2 lg:font-label lg:text-base lg:font-normal"
             onClick={() => go(1)}
             disabled={!canNext}
             aria-label={t("history.next_month_aria")}
@@ -607,7 +649,7 @@ export default function History() {
           {onlyAnomalies ? (
             <>
               <Stamp className="-rotate-[8deg] border-4 border-current px-[18px] py-2 text-[34px] text-yellow">{t("history.all_clear")}</Stamp>
-              <span className="max-w-[260px] leading-normal text-[oklch(0.82_0.01_90)]">
+              <span className="max-w-[260px] leading-normal text-paper-soft">
                 {t("history.no_anomaly_in", { month: monthName(month) })}
               </span>
             </>
@@ -650,7 +692,7 @@ export default function History() {
                     <div
                       key={d.date}
                       id={`day-${d.date}`}
-                      className={cx("grid border-b border-dotted border-[oklch(0.25_0_0)] px-1 py-[5px] text-[13px] text-grey lg:grid-cols-[130px_1fr] lg:px-4")}
+                      className={cx("grid border-b border-dotted border-line px-1 py-[5px] text-[13px] text-paper-dim lg:grid-cols-[130px_1fr] lg:px-4")}
                     >
                       <span>
                         <button type="button" className={DAY_LINK} onClick={() => showDay(d.date)}>
@@ -667,7 +709,7 @@ export default function History() {
                   <div key={d.date} id={`day-${d.date}`}>
                     {/* Desktop row */}
                     <div
-                      className={cx("hidden items-center border-b border-line px-4 py-[11px] hover:bg-[oklch(0.18_0_0)] lg:grid", COLS, open && "bg-[oklch(0.18_0_0)]")}
+                      className={cx("hidden items-center border-b border-line px-4 py-[11px] hover:bg-shade lg:grid", COLS, open && "bg-shade")}
                     >
                       <button type="button" className={cx("font-bold", DAY_LINK, d.isToday && "text-pink")} title={t("history.view_day")} onClick={() => showDay(d.date)}>
                         {dayLabel(d.date)}
@@ -680,7 +722,7 @@ export default function History() {
                         <AnomalyPill day={d} className="text-sm" />
                         <DayTypeBadge day={d} className="text-[13px]" />
                         {!d.anomalies.length && !d.mark && !d.holiday && (
-                          <span className={cx("font-label text-sm", d.isToday ? "text-pink" : "text-[oklch(0.5_0_0)]")}>
+                          <span className={cx("font-label text-sm", d.isToday ? "text-pink" : "text-paper-dim")}>
                             {d.isToday ? t("history.today") : t("history.normal")}
                           </span>
                         )}
@@ -706,7 +748,7 @@ export default function History() {
                           <span className="text-paper-muted">›</span>
                         </span>
                       </span>
-                      <span className="flex flex-wrap gap-1.5 text-[13px] text-[oklch(0.82_0.01_90)]">
+                      <span className="flex flex-wrap gap-1.5 text-[13px] text-paper-soft">
                         {d.punches.length > 0 && <span>{d.punches.map((p) => formatClock(p.ts, tz)).join(" · ")}</span>}
                         <AnomalyPill day={d} className="text-xs" />
                         <DayTypeBadge day={d} className="text-xs" />
@@ -722,15 +764,7 @@ export default function History() {
       </div>
 
       {editing && !desktop && <DayEditor day={editing} sheet onClose={() => setOpenDay(null)} />}
-      {forgotOpen && (
-        <ForgottenDialog
-          onClose={() => setForgotOpen(false)}
-          onAdded={(date) => {
-            setForgotOpen(false);
-            setParams({ month: monthKey(date), day: date });
-          }}
-        />
-      )}
+      {forgotDialog}
     </div>
   );
 }

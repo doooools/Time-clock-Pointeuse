@@ -1,6 +1,11 @@
 // Shared strings: navigation, widgets, toasts, language switch (French is the reference dictionary).
 export const common = {
   brand: "OPOINTEUSE",
+
+  // Empty states (new account)
+  emptyTitle: "RIEN À POINTER POUR L'INSTANT",
+  emptySetup: "configurer le téléphone",
+  emptyImport: "importer un historique",
   loadingTagline: "on photocopie vos heures…",
   error: "Erreur",
   errorStatus: "Erreur {status}",

@@ -79,6 +79,7 @@ export const history = {
   all_clear: "✓ rien à signaler",
   no_anomaly_in: "Aucune anomalie en {month}. Tous les pointages sont appariés.",
   no_days: "Aucun jour à afficher pour ce mois.",
+  empty_text: "Chaque pointage apparaîtra ici, jour par jour. Un oubli ? Ajoutez-le à la main avec le bouton ci-dessus.",
   week_title: "SEMAINE {week} · {from} → {to}",
   weekend: "week-end",
   rest_day: "repos",

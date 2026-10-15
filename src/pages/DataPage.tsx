@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { PARSE_ISSUE_LABELS } from "../../shared/labels";
 import { parseRawTimestamps, type DateOrder, type ParseResult } from "../../shared/parse";
 import { dayKey, formatClock, monthKey } from "../../shared/time";
 import { arrowOf, cx, Segmented } from "../components/Widgets";
-import { dayLabel as dayLabelIn, monthYear } from "../components/charts/intl";
+import { dayLabel as dayLabelIn, monthLabel } from "../lib/dates";
 import { useLocale, useT } from "../i18n";
 import { exportCsv, exportXlsx } from "../lib/export";
 import { dur, signed, signOf } from "../lib/fmt";
@@ -19,7 +20,7 @@ function ExportSection() {
   const past = days.filter((d) => !d.isFuture);
   const months = [...new Set(past.map((d) => monthKey(d.date)))].reverse();
   const years = [...new Set(past.map((d) => d.date.slice(0, 4)))].reverse();
-  const [mode, setMode] = useState<"mois" | "annee" | "tout">("mois");
+  const [mode, setMode] = useState<"month" | "year" | "all">("month");
   const [pickedMonth, setMonth] = useState("");
   const [pickedYear, setYear] = useState("");
   // Without a valid pick (no data at mount, or data imported since), fall back to the most recent.
@@ -28,45 +29,50 @@ function ExportSection() {
 
   const selection = useMemo(() => {
     if (!past.length) return { days: [], title: "", slug: "" };
-    if (mode === "mois") return { days: past.filter((d) => monthKey(d.date) === month), title: monthYear(locale, month), slug: month };
-    if (mode === "annee") return { days: past.filter((d) => d.date.startsWith(year)), title: t("data.title_year", { year }), slug: year };
+    if (mode === "month") return { days: past.filter((d) => monthKey(d.date) === month), title: monthLabel(locale, month), slug: month };
+    if (mode === "year") return { days: past.filter((d) => d.date.startsWith(year)), title: t("data.title_year", { year }), slug: year };
     return { days: past, title: t("data.title_all"), slug: "all" };
   }, [mode, month, year, past, locale, t]);
 
   const worked = selection.days.reduce((a, d) => a + d.workedMin, 0);
-  const delta = selection.days.reduce((a, d) => a + d.deltaMin, 0);
+  const delta = selection.days.reduce((a, d) => a + (d.inBalance ? d.deltaMin : 0), 0);
   const daysWorked = selection.days.filter((d) => d.workedMin > 0).length;
 
   return (
-    <section className="flex flex-col gap-[18px]" aria-labelledby="export-titre">
-      <h1 id="export-titre" className="-rotate-2 self-start bg-paper px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
+    <section className="flex flex-col gap-[18px]" aria-labelledby="export-title">
+      <h1 id="export-title" className="-rotate-2 self-start bg-paper px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
         {t("data.export_title")}
       </h1>
       {past.length === 0 ? (
-        <p className="text-paper-muted">{t("data.nothing_to_export")}</p>
+        <p className="text-paper-muted">
+          {t("data.nothing_to_export")}{" "}
+          <Link to="/settings#tuto" className="font-label text-yellow underline decoration-dotted underline-offset-4 hover:text-pink">
+            {t("common.emptySetup")} →
+          </Link>
+        </p>
       ) : (
         <>
           <Segmented
             value={mode}
             onChange={setMode}
             options={[
-              { value: "mois", label: t("data.mode_month") },
-              { value: "annee", label: t("data.mode_year") },
-              { value: "tout", label: t("data.mode_all") },
+              { value: "month", label: t("data.mode_month") },
+              { value: "year", label: t("data.mode_year") },
+              { value: "all", label: t("data.mode_all") },
             ]}
             className="mt-2 flex-wrap text-base"
           />
-          {mode !== "tout" && (
+          {mode !== "all" && (
             <div className="relative">
               <select
-                aria-label={mode === "mois" ? t("data.month_aria") : t("data.year_aria")}
+                aria-label={mode === "month" ? t("data.month_aria") : t("data.year_aria")}
                 className="field w-full cursor-pointer appearance-none py-2.5 pr-10 text-lg font-normal"
-                value={mode === "mois" ? month : year}
-                onChange={(e) => (mode === "mois" ? setMonth(e.target.value) : setYear(e.target.value))}
+                value={mode === "month" ? month : year}
+                onChange={(e) => (mode === "month" ? setMonth(e.target.value) : setYear(e.target.value))}
               >
-                {(mode === "mois" ? months : years).map((v) => (
+                {(mode === "month" ? months : years).map((v) => (
                   <option key={v} value={v} className="bg-ink">
-                    {mode === "mois" ? monthYear(locale, v).toLowerCase() : v}
+                    {mode === "month" ? monthLabel(locale, v).toLowerCase() : v}
                   </option>
                 ))}
               </select>
@@ -122,7 +128,8 @@ function ImportSection() {
   const { locale } = useLocale();
   const { punches, bulkImport, settings } = useStore();
   const tz = settings.timezone;
-  const [dateOrder, setDateOrder] = useState<DateOrder>(locale === "fr" ? "dmy" : "mdy");
+  // Month first only for US English; everywhere else (fr, en-GB…) day first.
+  const [dateOrder, setDateOrder] = useState<DateOrder>(() => (/^en-US/i.test(navigator.language) ? "mdy" : "dmy"));
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -133,11 +140,25 @@ function ImportSection() {
   // Every recognised timestamp, flagged as a duplicate when within 60 s of an existing or earlier one.
   const preview = useMemo(() => {
     if (!result) return null;
-    const existing = punches.map((p) => p.ts);
+    const buckets = new Map<number, number[]>();
+    const remember = (ts: number) => {
+      const b = Math.floor(ts / 60_000);
+      const list = buckets.get(b);
+      if (list) list.push(ts);
+      else buckets.set(b, [ts]);
+    };
+    const isDup = (ts: number) => {
+      const b = Math.floor(ts / 60_000);
+      return [b - 1, b, b + 1].some((k) => buckets.get(k)?.some((e) => Math.abs(e - ts) < 60_000));
+    };
+    for (const p of punches) remember(p.ts);
     const kept: number[] = [];
     const rows = result.stamps.map((s) => {
-      const dup = [...existing, ...kept].some((e) => Math.abs(e - s.ts) < 60_000);
-      if (!dup) kept.push(s.ts);
+      const dup = isDup(s.ts);
+      if (!dup) {
+        kept.push(s.ts);
+        remember(s.ts);
+      }
       return { ...s, dup };
     });
     const byDay = new Map<string, number[]>();
@@ -166,20 +187,22 @@ function ImportSection() {
       toast(t("data.imported", { count: r.inserted }) + (r.skipped ? t("data.skipped", { count: r.skipped }) : ""));
       setText("");
       setResult(null);
+    } catch {
+      /* already reported by the store */
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section className="flex min-w-0 flex-col gap-[18px]" aria-labelledby="import-titre">
-      <h2 id="import-titre" className="rotate-[1.5deg] self-start bg-yellow px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
+    <section className="flex min-w-0 flex-col gap-[18px]" aria-labelledby="import-title">
+      <h2 id="import-title" className="rotate-[1.5deg] self-start bg-yellow px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
         {t("data.import_title")}
       </h2>
       <div className="mt-2 grid gap-4 lg:grid-cols-[1fr_220px]">
         <textarea
           aria-label={t("data.textarea_aria")}
-          className="min-h-[150px] resize-y bg-paper px-4 py-3.5 font-mono text-[15px] leading-[1.6] whitespace-pre text-onpaper outline-none placeholder:text-onpaper/45 focus:shadow-[0_0_0_3px_oklch(0.88_0.17_100/.5)]"
+          className="min-h-[150px] resize-y bg-paper px-4 py-3.5 font-mono text-[15px] leading-[1.6] whitespace-pre text-onpaper outline-none placeholder:text-onpaper/45 focus:ring-3 focus:ring-yellow/50"
           placeholder={"25/09/2025 08:12:33\n2025-09-25 12:04\n26/09/2025;08:00;12:00;13:00;16:18"}
           value={text}
           onChange={(e) => {
@@ -273,7 +296,7 @@ function ImportSection() {
               <div className="font-label text-sm text-paper-muted">{t("data.errors_title")}</div>
               <div className="max-h-56 overflow-y-auto">
                 {result.issues.map((i) => (
-                  <div key={i.line} className="grid grid-cols-[80px_minmax(0,1fr)] gap-x-2.5 border-b border-dotted border-[oklch(0.35_0_0)] py-1.5 lg:grid-cols-[80px_260px_1fr]">
+                  <div key={i.line} className="grid grid-cols-[80px_minmax(0,1fr)] gap-x-2.5 border-b border-dotted border-line py-1.5 lg:grid-cols-[80px_260px_1fr]">
                     <span className="text-red-text">{t("data.line_n", { line: i.line })}</span>
                     <span className="truncate">{i.raw}</span>
                     <span className="col-start-2 text-paper-muted lg:col-start-auto lg:text-paper">{PARSE_ISSUE_LABELS[locale][i.code]}</span>
@@ -287,7 +310,7 @@ function ImportSection() {
             <div className="flex flex-col gap-1.5 text-[15px]">
               <div className="font-label text-sm text-paper-muted">{t("data.day_preview_title")}</div>
               {preview.days.slice(0, PREVIEW_DAYS).map(([date, stamps]) => (
-                <div key={date} className="grid grid-cols-[140px_1fr_50px] gap-2.5 border-b border-dotted border-[oklch(0.35_0_0)] py-1.5">
+                <div key={date} className="grid grid-cols-[140px_1fr_50px] gap-2.5 border-b border-dotted border-line py-1.5">
                   <span>
                     {dayLabelIn(locale, date)}/{date.slice(0, 4)}
                   </span>

@@ -3,6 +3,11 @@ import type { common as fr } from "../fr/common";
 
 export const common: Record<keyof typeof fr, string> = {
   brand: "OPOINTEUSE",
+
+  // Empty states (new account)
+  emptyTitle: "NOTHING TO PUNCH YET",
+  emptySetup: "set up your phone",
+  emptyImport: "import a history",
   loadingTagline: "photocopying your hours…",
   error: "Error",
   errorStatus: "Error {status}",

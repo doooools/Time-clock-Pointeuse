@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { workdaysPerWeek } from "../../shared/compute";
 import { HOLIDAY_REGIONS, NO_HOLIDAYS } from "../../shared/holidays";
 import type { Settings } from "../../shared/settings";
@@ -7,7 +8,7 @@ import IntegrationsGuide from "../components/IntegrationsGuide";
 import { cx, LangSwitch, Toggle } from "../components/Widgets";
 import { useLocale, useT } from "../i18n";
 import { api, ApiError, UnauthorizedError, type SettingsInfo, type SettingsPatch } from "../lib/api";
-import { dayShort, frDate, parseHm, parseSignedHm } from "../lib/dates";
+import { dayShort, fullDate, parseHm, parseSignedHm } from "../lib/dates";
 import { dur, signed } from "../lib/fmt";
 import { useStore } from "../lib/store";
 import { useToast } from "../lib/toast";
@@ -71,6 +72,7 @@ const Err = ({ id, children }: { id?: string; children: ReactNode }) => (
 
 function RulesForm({ info, reload }: { info: SettingsInfo | null; reload: () => Promise<void> }) {
   const t = useT();
+  const { locale } = useLocale();
   const { settings, saveSettings } = useStore();
   /** Pending changes: a value, or null = back to the instance default. */
   const [edits, setEdits] = useState<SettingsPatch>({});
@@ -143,13 +145,14 @@ function RulesForm({ info, reload }: { info: SettingsInfo | null; reload: () => 
     }
   }
 
-  // After a save the effective settings change: realign the text fields when nothing is pending.
+  // Once nothing is pending (after a save or a discard), the text fields show the saved values.
+  const pending = Object.keys(edits).length > 0;
   useEffect(() => {
-    if (Object.keys(edits).length) return;
+    if (pending) return;
     setTargetText(dur(settings.dailyTargetMin));
     setInitialText(signed(settings.initialBalanceMin));
     setTzText(settings.timezone);
-  }, [settings]);
+  }, [settings, pending]);
 
   /** "default" chip, or a button to go back to the instance value. */
   const origin = (k: FormKey, show: (v: never) => string) => {
@@ -174,7 +177,7 @@ function RulesForm({ info, reload }: { info: SettingsInfo | null; reload: () => 
   const startDate = valueOf("balanceStartDate");
   const regionName = (code: string) =>
     code === NO_HOLIDAYS ? t("settings.holidaysNone") : (HOLIDAY_REGIONS.find((r) => r.code === code)?.name ?? code);
-  const workdaysText = (days: number[]) => days.map((d) => dayShort(d)).join(" ") || "—";
+  const workdaysText = (days: number[]) => days.map((d) => dayShort(locale, d)).join(" ") || "—";
 
   return (
     <form onSubmit={save} className="flex flex-col gap-[22px]" aria-labelledby="rules">
@@ -220,7 +223,7 @@ function RulesForm({ info, reload }: { info: SettingsInfo | null; reload: () => 
                   on ? "bg-yellow text-onpaper" : "text-paper-muted shadow-[inset_0_0_0_2px_var(--color-paper-dim)] hover:bg-coal",
                 )}
               >
-                {dayShort(wd)}
+                {dayShort(locale, wd)}
               </button>
             );
           })}
@@ -330,7 +333,7 @@ function RulesForm({ info, reload }: { info: SettingsInfo | null; reload: () => 
       <Box
         label={t("settings.balanceStartLabel")}
         htmlFor="set-start"
-        aside={origin("balanceStartDate", (v: string | null) => (v ? frDate(v) : t("settings.firstPunch")))}
+        aside={origin("balanceStartDate", (v: string | null) => (v ? fullDate(locale, v) : t("settings.firstPunch")))}
       >
         <div className="flex flex-wrap items-center gap-3">
           <input
@@ -650,6 +653,12 @@ export default function SettingsPage() {
   useEffect(() => {
     reload();
   }, []);
+
+  // Links such as "/settings#tuto" (empty states) jump to the section.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [hash]);
 
   return (
     <div className="grid items-start gap-12 pt-6 lg:grid-cols-2 lg:gap-10 lg:pt-10">

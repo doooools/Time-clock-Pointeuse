@@ -1,14 +1,20 @@
 import { ANOMALY_LABELS, MARK_LABELS } from "../../shared/labels";
-import type { DayResult } from "../../shared/compute";
+import type { DayMark, DayResult } from "../../shared/compute";
 import { fmtDuration, fmtSigned, toHoursDecimal } from "../../shared/format";
 import { formatClock, isoWeek } from "../../shared/time";
-import { cap, fullDate, weekdayLong } from "../components/charts/intl";
+import { cap, dayName, fullDate } from "./dates";
 import { translate, type Locale, type TKeyInput } from "../i18n";
 
 type Cell = string | number;
 
 /** Translator bound to an export language (exports follow the UI language chosen at click time). */
 const tr = (locale: Locale) => (key: TKeyInput, vars?: Record<string, string | number>) => translate(locale, key, vars);
+
+/** "morning" / "afternoon" / "half day" for a half-day mark. */
+function halfText(locale: Locale, half: DayMark["half"]): string {
+  const t = tr(locale);
+  return half === "am" ? t("common.halfMorning") : half === "pm" ? t("common.halfAfternoon") : t("common.halfDay");
+}
 
 function recapHeader(locale: Locale): string[] {
   const t = tr(locale);
@@ -22,7 +28,7 @@ function recapRows(days: DayResult[], locale: Locale, tz: string): Cell[][] {
   const t = tr(locale);
   const rows: Cell[][] = days.map((d) => [
     fullDate(locale, d.date),
-    cap(weekdayLong(locale, d.weekday)),
+    cap(dayName(locale, d.weekday)),
     isoWeek(d.date).week,
     d.intervals.map((i) => `${formatClock(i.start, tz)}-${formatClock(i.end, tz)}`).join(" / ") +
       (d.danglingPunch ? `${d.intervals.length ? " / " : ""}${formatClock(d.danglingPunch.ts, tz)}-?` : ""),
@@ -31,18 +37,19 @@ function recapRows(days: DayResult[], locale: Locale, tz: string): Cell[][] {
     toHoursDecimal(d.targetMin),
     d.targetMin === 0 && d.workedMin === 0 ? "" : fmtSigned(d.deltaMin),
     toHoursDecimal(d.deltaMin),
-    fmtSigned(d.balanceMin),
-    d.mark ? `${MARK_LABELS[locale][d.mark.type]}${d.mark.portion < 1 ? " (½)" : ""}` : (d.holiday ?? ""),
+    d.inBalance ? fmtSigned(d.balanceMin) : "",
+    d.mark ? `${MARK_LABELS[locale][d.mark.type]}${d.mark.portion < 1 ? ` (${halfText(locale, d.mark.half)})` : ""}` : (d.holiday ?? ""),
     d.anomalies.map((a) => ANOMALY_LABELS[locale][a]).join(", "),
   ]);
   const worked = days.reduce((a, d) => a + d.workedMin, 0);
   const target = days.reduce((a, d) => a + d.targetMin, 0);
+  const lastCounted = [...days].reverse().find((d) => d.inBalance);
   rows.push([]);
   rows.push([
     t("data.total"), "", "", t("data.worked_days", { count: days.filter((d) => d.workedMin > 0).length }),
     fmtDuration(worked), toHoursDecimal(worked), toHoursDecimal(target),
     fmtSigned(worked - target), toHoursDecimal(worked - target),
-    days.length ? fmtSigned(days[days.length - 1].balanceMin) : "", "", "",
+    lastCounted ? fmtSigned(lastCounted.balanceMin) : "", "", "",
   ]);
   return rows;
 }

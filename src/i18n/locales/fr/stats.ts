@@ -17,13 +17,13 @@ export const stats = {
   days_short: "{count} j",
   percent: "{value} %",
 
+  tip_out_of_balance: "hors solde (avant la date de départ)",
   tip_balance: "solde",
   tip_day: "jour",
   tip_worked: "travaillé",
   tip_gap: "écart",
   tip_target: "objectif",
   tip_week: "semaine {week} ({from} → {to})",
-  tip_lunch: "pause midi",
   tip_break: "pause",
   tip_no_break: "pas de pause",
   tip_exit: "sortie",
@@ -57,6 +57,7 @@ export const stats = {
   empty_days_one: "{count} jour pointé : il en faut 5 pour tracer",
   empty_days_other: "{count} jours pointés : il en faut 5 pour tracer",
   empty_hint: "Choisissez une période plus longue ou",
+  empty_text: "Les graphiques apparaissent dès 5 jours pointés : configurez le téléphone ou importez votre historique.",
   empty_import: "importez un historique →",
 
   balance_title: "SOLDE CUMULÉ · jaune = en avance, rouge = en retard",

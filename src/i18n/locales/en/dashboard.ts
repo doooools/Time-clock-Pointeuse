@@ -2,10 +2,7 @@
 import type { dashboard as fr } from "../fr/dashboard";
 
 export const dashboard: Record<keyof typeof fr, string> = {
-  firstTitle: "NOTHING TO PUNCH YET",
   firstHint: "Set up the webhook on your phone, then tap it on the chip. Or import your history.",
-  configureWebhook: "set up the webhook",
-  importHistory: "import a history",
 
   exitFullDay: "FULL DAY",
   exitZero: "BALANCE AT ZERO",

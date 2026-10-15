@@ -11,39 +11,19 @@ import {
   DayRibbon,
   DayTypeBadge,
   Delta,
+  EmptyState,
   pauseMinutes,
   Ransom,
   reachedAt,
   Stamp,
   WeekStrip,
 } from "../components/Widgets";
-import { useT } from "../i18n";
-import { dayLabel, frDate, monthName } from "../lib/dates";
+import { useLocale, useT } from "../i18n";
+import { dayLabel, fullDate, monthName } from "../lib/dates";
 import { dur, durLive, signed, signOf } from "../lib/fmt";
 import { useIsDesktop } from "../lib/media";
 import { useNow, useStore } from "../lib/store";
 import { useOpenDay, useViewDay } from "../lib/viewDay";
-
-function FirstLaunch() {
-  const t = useT();
-  return (
-    <div className="flex flex-col items-start gap-7 py-10 lg:flex-row lg:items-center lg:py-20">
-      <div className="-rotate-[5deg] bg-yellow px-[22px] py-1.5 font-display text-[120px] leading-none text-onpaper">?</div>
-      <div className="flex max-w-[440px] flex-col gap-3">
-        <h1 className="font-display text-[30px] tracking-[.02em]">{t("dashboard.firstTitle")}</h1>
-        <p className="leading-[1.45] text-paper-soft">{t("dashboard.firstHint")}</p>
-        <div className="flex flex-wrap gap-3">
-          <Link to="/settings" className="btn-primary px-3.5 py-2 text-[15px]">
-            {t("dashboard.configureWebhook")}
-          </Link>
-          <Link to="/data" className="btn-secondary px-3.5 py-2 text-[15px]">
-            {t("dashboard.importHistory")}
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /** Dashed card showing a planned exit time. */
 function ExitCard({
@@ -87,6 +67,7 @@ function ExitCard({
 
 export default function Dashboard() {
   const t = useT();
+  const { locale } = useLocale();
   const { byDay, marks, settings, punchNow } = useStore();
   const tz = settings.timezone;
   const clock = (ts: number) => formatClock(ts, tz);
@@ -102,7 +83,7 @@ export default function Dashboard() {
   const days = useMemo(() => computeDaysFromGroups(byDay, marks, settings, now), [byDay, marks, settings, now]);
   const dayByDate = useMemo(() => new Map(days.map((d) => [d.date, d])), [days]);
 
-  if (days.length === 0) return <FirstLaunch />;
+  if (days.length === 0) return <EmptyState heading="h1" text={t("dashboard.firstHint")} />;
 
   // Past day: state at 23:59:59 on that day (in the user's timezone).
   const viewNow = viewDay ? (({ y, m, d }) => zonedToUtc(tz, y, m, d, 23, 59, 59))(parseDayKey(viewDay)) : now;
@@ -149,7 +130,7 @@ export default function Dashboard() {
   // A day before the balance start date is shown, but does not move the balance.
   const outOfBalance = day !== null && !day.inBalance;
   const heroNote = outOfBalance
-    ? t("dashboard.noteBeforeStart", { date: frDate(settings.balanceStartDate ?? today) })
+    ? t("dashboard.noteBeforeStart", { date: fullDate(locale, settings.balanceStartDate ?? today) })
     : started
       ? null
       : st.targetMin === 0 && day?.holiday && !day.mark
@@ -171,7 +152,8 @@ export default function Dashboard() {
 
   let zero: { time: string; muted?: boolean; sub: ReactNode; reached?: string };
   const needToday = st.targetMin - st.balanceYesterdayMin; // time worked needed for a zero balance
-  if (signOf(st.liveBalanceMin) >= 0) {
+  if (outOfBalance) zero = { time: "—", sub: heroNote };
+  else if (signOf(st.liveBalanceMin) >= 0) {
     const at = needToday > 0 ? reachedAt(day, needToday) : null;
     zero = { time: at ? clock(at) : "—", muted: true, sub: at ? t("dashboard.zeroBack") : t("dashboard.zeroAlreadyPositive"), reached: t("dashboard.stampReachedZero") };
   } else if (st.present && st.endForZeroAt) {
@@ -216,7 +198,7 @@ export default function Dashboard() {
               past ? "-rotate-1 bg-yellow text-onpaper" : "text-paper-muted underline decoration-dotted underline-offset-4",
             )}
           >
-            {dayLabel(today)}
+            {dayLabel(locale, today)}
             {!past && ` · ${clock(now)}`} ▾
           </DayPickerButton>
           {past && (
@@ -352,7 +334,7 @@ export default function Dashboard() {
           className="grid -rotate-[.8deg] grid-cols-[1fr_auto] content-start gap-y-[5px] bg-blue px-4 py-3.5 text-[15px] text-white lg:-rotate-1 lg:px-5 lg:py-4 lg:text-base"
           aria-label={t("dashboard.monthAria")}
         >
-          <span className="col-span-2 mb-1 font-label text-xs lg:text-[15px]">{monthName(Number(today.slice(5, 7))).toUpperCase()}</span>
+          <span className="col-span-2 mb-1 font-label text-xs lg:text-[15px]">{monthName(locale, Number(today.slice(5, 7))).toUpperCase()}</span>
           <span>{t("dashboard.monthWorked")}</span>
           <b>{dur(monthSum?.workedMin ?? 0)}</b>
           <span>{t("dashboard.monthTarget")}</span>
@@ -386,7 +368,7 @@ export default function Dashboard() {
                   )}
                 >
                   <span>
-                    ⚠ {dayLabel(d.date)} <span className="hidden lg:inline">—</span>
+                    ⚠ {dayLabel(locale, d.date)} <span className="hidden lg:inline">—</span>
                     <span className="lg:hidden">·</span> {d.anomalies.map((a) => ANOMALY_SHORT[a]).join(", ")}
                   </span>
                   <span aria-hidden>→</span>

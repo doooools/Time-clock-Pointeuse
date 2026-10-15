@@ -81,6 +81,7 @@ export const history: Record<keyof typeof fr, string> = {
   all_clear: "✓ all clear",
   no_anomaly_in: "No anomalies in {month}. Every punch is paired.",
   no_days: "No days to show for this month.",
+  empty_text: "Every punch will show up here, day by day. Forgot one? Add it by hand with the button above.",
   week_title: "WEEK {week} · {from} → {to}",
   weekend: "weekend",
   rest_day: "rest day",

@@ -1,9 +1,6 @@
 // Dashboard ("today") strings.
 export const dashboard = {
-  firstTitle: "RIEN À POINTER POUR L'INSTANT",
   firstHint: "Configurez le webhook sur votre téléphone, puis passez-le devant la puce. Ou importez votre historique.",
-  configureWebhook: "configurer le webhook",
-  importHistory: "importer un historique",
 
   exitFullDay: "JOURNÉE COMPLÈTE",
   exitZero: "SOLDE À ZÉRO",

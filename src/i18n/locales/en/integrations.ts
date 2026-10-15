@@ -11,8 +11,6 @@ export const integrations: Record<keyof typeof fr, string> = {
   tab_android: "Android (Tasker + NFC)",
   tab_ios: "iPhone (Shortcuts)",
   tab_http: "HTTP / other",
-  steps_one: "{count} step",
-  steps_other: "{count} steps",
   trouble_label: "not working?",
   security_label: "security and variants",
   docs_hint: "The same guides, plus the shared wall badge reader (ESP32 + RC522), are in the docs/integrations folder of the repository.",

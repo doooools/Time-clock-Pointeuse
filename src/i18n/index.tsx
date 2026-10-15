@@ -66,11 +66,6 @@ export function translate(locale: Locale, key: TKeyInput, vars?: TVars): string 
 // Locale mirrored outside React so that plain helpers (date formatting, toasts, chart tooltips) can follow it.
 let currentLocale: Locale = detectLocale();
 
-/** Current UI locale, for non-React code. Components must still call `useT()`/`useLocale()` to re-render on change. */
-export function getLocale(): Locale {
-  return currentLocale;
-}
-
 /** Translate with the current UI locale, for non-React code. */
 export function tr(key: TKeyInput, vars?: TVars): string {
   return translate(currentLocale, key, vars);

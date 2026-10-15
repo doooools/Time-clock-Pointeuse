@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { addDays, dayKey, formatClock, weekday } from "../shared/time";
+import { addDays, dayKey, formatClock } from "../shared/time";
 import { normalizeLocale } from "../shared/settings";
 import { cx, DayPickerButton, LangSwitch } from "./components/Widgets";
 import { savedLocale, useLocale, useT, type TKey } from "./i18n";
@@ -45,6 +45,7 @@ export function Loading() {
 /** Date at the top right: click to pick the day shown on "Today". */
 function HeaderDate() {
   const t = useT();
+  const { locale } = useLocale();
   const now = useNow(1000);
   const tz = useTz();
   const today = dayKey(now, tz);
@@ -66,7 +67,7 @@ function HeaderDate() {
           day ? "-rotate-1 bg-yellow text-onpaper" : "text-paper-muted underline decoration-dotted underline-offset-4 hover:text-paper",
         )}
       >
-        {longDate(shown, weekday(shown))}
+        {longDate(locale, shown)}
         {!day && ` — ${formatClock(now, tz)}`} ▾
       </DayPickerButton>
       <button className={arrow} aria-label={t("common.nextDay")} disabled={!day} onClick={() => setDay(addDays(shown, 1))}>
