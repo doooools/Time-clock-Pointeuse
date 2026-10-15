@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { cx } from "../components/Widgets";
 import { intlTag, useLocale, useT } from "../i18n";
 import { api, userLabel, type AuditEntryView, type TeamMember } from "../lib/api";
-import { describeChange } from "../lib/audit";
+import { authorLabel, describeChange } from "../lib/audit";
 import { useMe } from "../lib/me";
 import { teamPath, useTz } from "../lib/store";
 
@@ -122,7 +122,7 @@ export default function Journal() {
         <ul className="flex flex-col">
           {entries.map((entry) => {
             const d = describeChange(entry, t, tz);
-            const actor = entry.actor ? userLabel(entry.actor) : t("journal.byCli");
+            const actor = entry.actor ? userLabel(entry.actor) : authorLabel(entry, t);
             const otherAccount = entry.subject.id !== me.id;
             return (
               <li key={entry.id} className="flex flex-col gap-1 border-b border-line px-1 py-3 sm:flex-row sm:gap-5">

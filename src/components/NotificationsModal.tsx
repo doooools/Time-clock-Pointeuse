@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { dayKey, formatClock, monthKey } from "../../shared/time";
 import { useLocale, useT } from "../i18n";
 import { api, UnauthorizedError, type NotificationView } from "../lib/api";
-import { describeChange } from "../lib/audit";
+import { authorLabel, describeChange } from "../lib/audit";
 import { dayLabel } from "../lib/dates";
 import { useMe } from "../lib/me";
 import { useModal } from "../lib/modal";
@@ -74,9 +74,9 @@ function Dialog({ items, onDismissed }: { items: NotificationView[]; onDismissed
   const groups = useMemo(() => {
     const byKey = new Map<string, Group>();
     for (const n of items) {
-      const key = n.entry.actor ? `u${n.entry.actor.id}` : "cli";
+      const key = n.entry.actor ? `u${n.entry.actor.id}` : n.entry.source;
       let g = byKey.get(key);
-      if (!g) byKey.set(key, (g = { key, author: n.entry.actor?.displayName ?? null, items: [] }));
+      if (!g) byKey.set(key, (g = { key, author: authorLabel(n.entry, t), items: [] }));
       g.items.push(n);
     }
     return [...byKey.values()];
@@ -126,7 +126,7 @@ function Dialog({ items, onDismissed }: { items: NotificationView[]; onDismissed
           {groups.map((g) => (
             <section key={g.key} aria-labelledby={`notif-${g.key}`} className="flex flex-col gap-2 border-t-2 border-dashed border-onpaper pt-3">
               <h3 id={`notif-${g.key}`} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="-rotate-1 bg-yellow px-2 py-0.5 font-display text-lg">{g.author ?? t("notifications.byCli")}</span>
+                <span className="-rotate-1 bg-yellow px-2 py-0.5 font-display text-lg">{g.author}</span>
                 <span className="font-label text-[13px]">{t("notifications.changes", { count: g.items.length })}</span>
               </h3>
               <ul className="flex flex-col gap-2.5">
