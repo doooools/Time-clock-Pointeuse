@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { addDays, dayKey, formatClock, weekday } from "../shared/time";
-import { cx, DayPickerButton } from "./components/Widgets";
+import { cx, DayPickerButton, LangSwitch } from "./components/Widgets";
+import { useT, type TKey } from "./i18n";
 import { api } from "./lib/api";
 import { longDate } from "./lib/dates";
 import { StoreProvider, useNow, useStore } from "./lib/store";
@@ -12,19 +13,20 @@ import History from "./pages/History";
 import Login from "./pages/Login";
 import SettingsPage from "./pages/Settings";
 
-// ECharts est lourd : l'onglet Stats est chargé à la demande.
+// ECharts is heavy: the Stats tab is loaded on demand.
 const Stats = lazy(() => import("./pages/Stats"));
 
-const NAV = [
-  { to: "/", label: "aujourd'hui", glyph: "±" },
-  { to: "/historique", label: "historique", glyph: "≡" },
-  { to: "/stats", label: "statistiques", short: "stats", glyph: "▮▯" },
-  { to: "/donnees", label: "données", glyph: "⇅" },
-  { to: "/reglages", label: "réglages", glyph: "⚙" },
+const NAV: { to: string; label: TKey; short?: TKey; glyph: string }[] = [
+  { to: "/", label: "common.navToday", glyph: "±" },
+  { to: "/historique", label: "common.navHistory", glyph: "≡" },
+  { to: "/stats", label: "common.navStats", short: "common.navStatsShort", glyph: "▮▯" },
+  { to: "/donnees", label: "common.navData", glyph: "⇅" },
+  { to: "/reglages", label: "common.navSettings", glyph: "⚙" },
 ];
 
-/** Squelette de chargement : cases grises de travers. */
+/** Loading skeleton: tilted grey boxes. */
 export function Loading() {
+  const t = useT();
   return (
     <div className="flex flex-col gap-[18px] py-10" aria-busy="true">
       <div className="h-[26px] w-[220px] bg-[oklch(0.22_0_0)]" />
@@ -32,15 +34,16 @@ export function Loading() {
         {[-4, 2, -2, 3].map((r, i) => (
           <div key={i} className="h-24 w-[70px] bg-[oklch(0.21_0_0)]" style={{ transform: `rotate(${r}deg)` }} />
         ))}
-        <span className="ml-[18px] font-label text-lg text-paper-muted">on photocopie vos heures…</span>
+        <span className="ml-[18px] font-label text-lg text-paper-muted">{t("common.loadingTagline")}</span>
       </div>
       <div className="h-[18px] w-full max-w-[420px] bg-coal" />
     </div>
   );
 }
 
-/** Date en haut à droite : cliquable pour choisir le jour affiché dans « Aujourd'hui ». */
+/** Date at the top right: click to pick the day shown on "Today". */
 function HeaderDate() {
+  const t = useT();
   const now = useNow(1000);
   const today = dayKey(now);
   const [day, setDay] = useViewDay(today);
@@ -48,14 +51,14 @@ function HeaderDate() {
   const arrow = "min-h-8 cursor-pointer px-1.5 text-paper-muted hover:text-yellow disabled:cursor-default disabled:text-grey";
   return (
     <div className="flex items-center gap-1 font-label text-base">
-      <button className={arrow} aria-label="Jour précédent" onClick={() => setDay(addDays(shown, -1))}>
+      <button className={arrow} aria-label={t("common.prevDay")} onClick={() => setDay(addDays(shown, -1))}>
         ‹
       </button>
       <DayPickerButton
         value={shown}
         max={today}
         onChange={setDay}
-        label="Choisir le jour à afficher"
+        label={t("common.pickDay")}
         className={cx(
           "px-2 py-0.5",
           day ? "-rotate-1 bg-yellow text-onpaper" : "text-paper-muted underline decoration-dotted underline-offset-4 hover:text-paper",
@@ -64,12 +67,12 @@ function HeaderDate() {
         {longDate(shown, weekday(shown))}
         {!day && ` — ${formatClock(now)}`} ▾
       </DayPickerButton>
-      <button className={arrow} aria-label="Jour suivant" disabled={!day} onClick={() => setDay(addDays(shown, 1))}>
+      <button className={arrow} aria-label={t("common.nextDay")} disabled={!day} onClick={() => setDay(addDays(shown, 1))}>
         ›
       </button>
       {day && (
         <button className="ml-2 cursor-pointer text-paper-muted hover:text-yellow" onClick={() => setDay(null)}>
-          ✕ aujourd'hui
+          {t("common.backToToday")}
         </button>
       )}
     </div>
@@ -77,19 +80,18 @@ function HeaderDate() {
 }
 
 function Shell() {
+  const t = useT();
   const { loading, readOnly } = useStore();
   return (
     <div className="min-h-dvh">
       {readOnly && (
-        <div className="bg-yellow px-[18px] py-1 text-center font-label text-sm text-onpaper">
-          LECTURE SEULE · consultation sans modification possible
-        </div>
+        <div className="bg-yellow px-[18px] py-1 text-center font-label text-sm text-onpaper">{t("common.readOnlyBanner")}</div>
       )}
-      {/* En-tête bureau */}
+      {/* Desktop header */}
       <header className="mx-auto hidden max-w-[1600px] items-center justify-between px-10 pt-[30px] lg:flex">
         <div className="flex items-center gap-7">
           <NavLink to="/" className="-rotate-2 bg-paper px-3.5 py-0.5 font-display text-[34px] tracking-[.02em] text-onpaper">
-            LA POINTEUSE
+            {t("common.brand")}
           </NavLink>
           <nav className="flex gap-[22px] font-label text-base">
             {NAV.map(({ to, label }) => (
@@ -101,12 +103,15 @@ function Shell() {
                   isActive ? "text-yellow underline decoration-[3px] underline-offset-4" : "text-paper-muted hover:text-paper"
                 }
               >
-                {label}
+                {t(label)}
               </NavLink>
             ))}
           </nav>
         </div>
-        <HeaderDate />
+        <div className="flex items-center gap-6">
+          <HeaderDate />
+          <LangSwitch />
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-[1600px] px-[18px] pb-[100px] lg:px-10 lg:pb-16">
@@ -126,7 +131,7 @@ function Shell() {
         )}
       </main>
 
-      {/* Barre d'onglets mobile */}
+      {/* Mobile tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t-[3px] border-onpaper bg-paper pb-[env(safe-area-inset-bottom)] font-label text-xs text-onpaper lg:hidden">
         {NAV.map(({ to, label, short, glyph }) => (
           <NavLink
@@ -140,7 +145,7 @@ function Shell() {
             <b aria-hidden className="font-display text-lg font-normal">
               {glyph}
             </b>
-            {short ?? label}
+            {t(short ?? label)}
           </NavLink>
         ))}
       </nav>
@@ -170,12 +175,15 @@ export default function App() {
         <Loading />
       </div>
     );
-  if (!auth) return <Login
+  if (!auth)
+    return (
+      <Login
         onSuccess={(ro) => {
           setReadOnly(ro);
           setAuth(true);
         }}
-      />;
+      />
+    );
   return (
     <StoreProvider onUnauthorized={onUnauthorized} readOnly={readOnly}>
       <Shell />

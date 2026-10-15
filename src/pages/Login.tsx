@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { Stamp } from "../components/Widgets";
+import { LangSwitch, Stamp } from "../components/Widgets";
+import { useT } from "../i18n";
 import { api } from "../lib/api";
 
 export default function Login({ onSuccess }: { onSuccess: (readOnly: boolean) => void }) {
+  const t = useT();
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -33,10 +35,11 @@ export default function Login({ onSuccess }: { onSuccess: (readOnly: boolean) =>
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-[30px] px-[18px]">
-      <h1 className="-rotate-3 bg-paper px-[18px] py-0.5 font-display text-[40px] text-onpaper lg:text-5xl">LA POINTEUSE</h1>
+      <LangSwitch className="absolute top-3 right-3" />
+      <h1 className="-rotate-3 bg-paper px-[18px] py-0.5 font-display text-[40px] text-onpaper lg:text-5xl">{t("common.brand")}</h1>
       <form onSubmit={submit} className="relative flex w-full max-w-[340px] flex-col gap-3">
         <label htmlFor="mdp" className="lbl">
-          mot de passe
+          {t("login.passwordLabel")}
         </label>
         <input
           id="mdp"
@@ -52,10 +55,10 @@ export default function Login({ onSuccess }: { onSuccess: (readOnly: boolean) =>
         {error && (
           <>
             <div id="mdp-erreur" className="text-[15px] text-[oklch(0.78_0.15_27)]">
-              ✕ Mot de passe incorrect. Réessayez.
+              {t("login.wrongPassword")}
             </div>
             <Stamp className="absolute -top-[50px] -right-2 rotate-[14deg] border-4 border-current px-3 py-1 text-2xl text-red-text lg:-right-[60px]">
-              refusé
+              {t("login.stampRefused")}
             </Stamp>
           </>
         )}
@@ -63,7 +66,7 @@ export default function Login({ onSuccess }: { onSuccess: (readOnly: boolean) =>
           className="btn -rotate-1 bg-yellow p-3 text-lg text-onpaper hover:bg-[oklch(0.92_0.15_100)] hover:shadow-hard"
           disabled={busy || !password}
         >
-          {busy ? "vérification…" : "entrer →"}
+          {busy ? t("login.checking") : t("login.submit")}
         </button>
         <button
           type="button"
@@ -71,7 +74,7 @@ export default function Login({ onSuccess }: { onSuccess: (readOnly: boolean) =>
           disabled={busy}
           onClick={viewOnly}
         >
-          pas de mot de passe ? consulter en lecture seule
+          {t("login.readOnly")}
         </button>
       </form>
     </div>

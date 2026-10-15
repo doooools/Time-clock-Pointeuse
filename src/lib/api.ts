@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import type { DayMark, MarkType, Punch, Settings } from "../../shared/compute";
 
 export class UnauthorizedError extends Error {}
@@ -11,7 +12,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   });
   if (res.status === 401) throw new UnauthorizedError();
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Erreur ${res.status}`);
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? tr("common.errorStatus", { status: res.status }));
   return data as T;
 }
 

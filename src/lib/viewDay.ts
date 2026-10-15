@@ -4,8 +4,8 @@ import { dayKey } from "../../shared/time";
 const dayPath = (d: string | null, today: string) => (!d || d >= today ? "/" : `/?jour=${d}`);
 
 /**
- * Jour affiché dans « Aujourd'hui » (`/?jour=YYYY-MM-DD`) ; `null` = aujourd'hui, en direct.
- * Choisir un jour depuis un autre onglet ramène sur « Aujourd'hui ».
+ * Day shown on the "Today" page (`/?jour=YYYY-MM-DD`); `null` = today, live.
+ * Picking a day from another tab brings you back to "Today".
  */
 export function useViewDay(today: string): [string | null, (day: string | null) => void] {
   const [params] = useSearchParams();
@@ -17,7 +17,7 @@ export function useViewDay(today: string): [string | null, (day: string | null) 
   return [day, setDay];
 }
 
-/** Ouvre un jour dans « Aujourd'hui », comme depuis le sélecteur de l'en-tête (et remonte en haut de page). */
+/** Opens a day on the "Today" page, like the header picker does (and scrolls to the top). */
 export function useOpenDay(): (day: string) => void {
   const navigate = useNavigate();
   return (d) => {

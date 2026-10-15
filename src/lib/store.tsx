@@ -10,10 +10,11 @@ import {
   type Settings,
 } from "../../shared/compute";
 import { dayKey, formatClock, parseDayKey } from "../../shared/time";
+import { tr } from "../i18n";
 import { api, UnauthorizedError } from "./api";
 import { useToast } from "./toast";
 
-/** Horloge qui se rafraîchit toutes les `intervalMs`. */
+/** Clock that refreshes every `intervalMs`. */
 export function useNow(intervalMs = 1000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -30,13 +31,13 @@ export function useNow(intervalMs = 1000): number {
 
 type Store = {
   loading: boolean;
-  /** Session « lecture seule » : aucune modification possible. */
+  /** Read-only session: no changes possible. */
   readOnly: boolean;
   punches: Punch[];
   marks: DayMark[];
   settings: Settings;
   byDay: Map<string, Punch[]>;
-  /** Jours calculés (rafraîchis chaque minute). */
+  /** Computed days (refreshed every minute). */
   days: DayResult[];
   refresh: () => Promise<void>;
   punchNow: () => Promise<void>;
@@ -73,7 +74,7 @@ export function StoreProvider({
         return await fn();
       } catch (e) {
         if (e instanceof UnauthorizedError) onUnauthorized();
-        else toast(e instanceof Error ? e.message : "Erreur", { tone: "error" });
+        else toast(e instanceof Error ? e.message : tr("common.error"), { tone: "error" });
         throw e;
       }
     },
@@ -90,7 +91,7 @@ export function StoreProvider({
 
   useEffect(() => {
     refresh().catch(() => {});
-    // Recharge quand on revient sur l'app (ex. après un pointage NFC).
+    // Reload when the user comes back to the app (e.g. after an NFC punch).
     const onVisible = () => document.visibilityState === "visible" && refresh().catch(() => {});
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -115,12 +116,12 @@ export function StoreProvider({
     async (p: Punch) => {
       await mutate(() => api.deletePunch(p.id));
       const { d, m } = parseDayKey(dayKey(p.ts));
-      toast(`Pointage de ${formatClock(p.ts)} supprimé · ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`, {
+      toast(tr("common.punchDeleted", { time: formatClock(p.ts), date: `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}` }), {
         action: {
-          label: "Annuler",
+          label: tr("common.undo"),
           onClick: () =>
             mutate(() => api.restorePunch(p.id))
-              .then(() => toast(`↺ Pointage de ${formatClock(p.ts)} restauré`))
+              .then(() => toast(tr("common.punchRestored", { time: formatClock(p.ts) })))
               .catch(() => {}),
         },
       });
@@ -139,13 +140,13 @@ export function StoreProvider({
     refresh,
     punchNow: async () => {
       const p = await mutate(() => api.addPunch(Date.now()));
-      toast(`Pointage enregistré à ${formatClock(p.ts)}`, {
-        action: { label: "Annuler", onClick: () => mutate(() => api.deletePunch(p.id)).catch(() => {}) },
+      toast(tr("common.punchSaved", { time: formatClock(p.ts) }), {
+        action: { label: tr("common.undo"), onClick: () => mutate(() => api.deletePunch(p.id)).catch(() => {}) },
       });
     },
     addPunch: async (ts) => {
       await mutate(() => api.addPunch(ts));
-      toast(`Pointage ajouté à ${formatClock(ts)}`);
+      toast(tr("common.punchAdded", { time: formatClock(ts) }));
     },
     updatePunch: async (id, ts) => {
       await mutate(() => api.updatePunch(id, { ts }));
@@ -160,7 +161,7 @@ export function StoreProvider({
     bulkImport: (timestamps) => mutate(() => api.bulkImport(timestamps)),
     saveSettings: async (patch) => {
       await mutate(() => api.saveSettings(patch));
-      toast("Paramètres enregistrés");
+      toast(tr("common.settingsSaved"));
     },
   };
 
@@ -169,6 +170,6 @@ export function StoreProvider({
 
 export function useStore(): Store {
   const s = useContext(StoreContext);
-  if (!s) throw new Error("StoreProvider manquant");
+  if (!s) throw new Error("StoreProvider missing");
   return s;
 }

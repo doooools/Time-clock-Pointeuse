@@ -2,20 +2,22 @@ import { useRef, type CSSProperties, type ReactNode } from "react";
 import type { DayMark, DayResult } from "../../shared/compute";
 import { fmtDuration } from "../../shared/format";
 import { formatClock, minutesOfDay } from "../../shared/time";
+import { LOCALES, tr, useLocale, useT } from "../i18n";
+import { dayLetter, dayShort } from "../lib/dates";
 import { dur, signed, signOf } from "../lib/fmt";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
-/* ─────────────── Solde en lettres découpées ─────────────── */
+/* ─────────────── Balance in cut-out letters ─────────────── */
 
-// Couleur et inclinaison par position depuis la droite, jamais par valeur :
-// seules les lettres changent quand le solde bouge.
+// Colour and tilt depend on the position from the right, never on the value:
+// only the letters change when the balance moves.
 const CASES: CSSProperties[] = [
-  { background: "var(--color-blue)", color: "#fff", transform: "rotate(-2deg)" },
-  { background: "var(--color-yellow)", color: "#111", transform: "rotate(3deg)" },
+  { background: "var(--color-blue)", color: "var(--color-white)", transform: "rotate(-2deg)" },
+  { background: "var(--color-yellow)", color: "var(--color-onpaper)", transform: "rotate(3deg)" },
   { background: "transparent", color: "var(--color-paper)", fontFamily: "var(--font-label)", fontWeight: 400, transform: "rotate(-3deg)" },
-  { background: "var(--color-paper)", color: "#111", transform: "rotate(2deg)" },
-  { background: "var(--color-paper)", color: "#111", transform: "rotate(-1deg)" },
+  { background: "var(--color-paper)", color: "var(--color-onpaper)", transform: "rotate(2deg)" },
+  { background: "var(--color-paper)", color: "var(--color-onpaper)", transform: "rotate(-1deg)" },
 ];
 const CASE: CSSProperties = {
   display: "inline-block",
@@ -26,8 +28,8 @@ const CASE: CSSProperties = {
   lineHeight: 1.05,
 };
 const SIGNS: Record<string, CSSProperties> = {
-  "+": { background: "var(--color-yellow)", color: "#111" },
-  "−": { background: "var(--color-red)", color: "#fff" },
+  "+": { background: "var(--color-yellow)", color: "var(--color-onpaper)" },
+  "−": { background: "var(--color-red)", color: "var(--color-white)" },
   "±": { background: "transparent", color: "var(--color-paper)", boxShadow: "inset 0 0 0 3px var(--color-paper)" },
 };
 
@@ -36,8 +38,8 @@ export function balanceWords(min: number): string {
   const total = Math.round(Math.abs(min));
   const h = Math.floor(total / 60);
   const m = total % 60;
-  const state = s > 0 ? "en avance" : s < 0 ? "en retard" : "à l'équilibre";
-  return `solde ${s < 0 ? "moins" : "plus"} ${h ? `${h} heure${h > 1 ? "s" : ""} ` : ""}${m} minute${m > 1 ? "s" : ""}, ${state}`;
+  const amount = `${h ? `${tr("common.nHours", { count: h })} ` : ""}${tr("common.nMinutes", { count: m })}`;
+  return tr(s > 0 ? "common.balanceAriaAhead" : s < 0 ? "common.balanceAriaBehind" : "common.balanceAriaEven", { amount });
 }
 
 /** Taille et espacement via `className` (ex. "gap-[5px] text-[74px]"). */
@@ -59,11 +61,11 @@ export function Ransom({ min, className }: { min: number; className?: string }) 
   );
 }
 
-/* ─────────────── Avance / retard ─────────────── */
+/* ─────────────── Ahead / behind ─────────────── */
 
 /**
- * Écart signé, jamais par la couleur seule : ▲ avance (jaune), ▼ retard (bloc rouge),
- * = à l'équilibre, « en cours » en rose. `onLight` : avance en bloc jaune (sur papier).
+ * Signed gap, never conveyed by colour alone: ▲ ahead (yellow), ▼ behind (red block),
+ * = even, "in progress" in pink. `onLight`: ahead as a yellow block (on paper).
  */
 export function Delta({
   min,
@@ -80,7 +82,7 @@ export function Delta({
 }) {
   const s = signOf(min);
   const txt = signed(min);
-  if (live) return <span className={cx("whitespace-nowrap text-pink", className)}>{txt} en cours</span>;
+  if (live) return <span className={cx("whitespace-nowrap text-pink", className)}>{txt} {tr("common.inProgress")}</span>;
   const arrow = s > 0 ? "▲" : s < 0 ? "▼" : "=";
   const content = after ? `${txt} ${arrow}` : `${arrow} ${txt}`;
   className = cx("whitespace-nowrap", className);
@@ -90,18 +92,26 @@ export function Delta({
   return <span className={className}>{content}</span>;
 }
 
-/** Solde en ligne : rouge clair si négatif, avec son signe. */
+/** Inline balance: light red when negative, with its sign. */
 export function Balance({ min, className }: { min: number; className?: string }) {
   return <span className={cx(signOf(min) < 0 && "text-red-text", className)}>{signed(min)}</span>;
 }
 
-/* ─────────────── Tampons, pastilles, badges ─────────────── */
+/* ─────────────── Stamps, pills, badges ─────────────── */
 
-export const ANOMALY_SHORT: Record<DayResult["anomalies"][number], string> = {
-  missing_exit: "sortie manquante",
-  no_punch: "aucun pointage",
-  short_pair: "en double ?",
-};
+const ANOMALY_KEYS = {
+  missing_exit: "common.anomalyMissingExit",
+  no_punch: "common.anomalyNoPunch",
+  short_pair: "common.anomalyShortPair",
+} as const;
+
+/** Short anomaly labels in the current UI language (read lazily, so a language switch is picked up on re-render). */
+export const ANOMALY_SHORT = Object.defineProperties(
+  {} as Record<DayResult["anomalies"][number], string>,
+  Object.fromEntries(
+    Object.entries(ANOMALY_KEYS).map(([a, key]) => [a, { enumerable: true, get: () => tr(key) }]),
+  ),
+);
 
 export function AnomalyPill({ day, className }: { day: DayResult; className?: string }) {
   if (!day.anomalies.length) return null;
@@ -112,7 +122,7 @@ export function AnomalyPill({ day, className }: { day: DayResult; className?: st
   );
 }
 
-/** Moment où le travaillé cumulé de la journée atteint `targetMin` (null si jamais). */
+/** Moment when the cumulative time worked in the day reaches `targetMin` (null if never). */
 export function reachedAt(day: DayResult | null, targetMin: number): number | null {
   if (!day) return null;
   let cum = 0;
@@ -131,49 +141,50 @@ export function Stamp({ children, className, style }: { children: ReactNode; cla
   );
 }
 
-/** Tampon avance / retard / équilibre du solde. */
+/** Ahead / behind / even stamp for the balance. */
 export function BalanceStamp({ min, dayDelta, size = 26, className }: { min: number; dayDelta?: number; size?: number; className?: string }) {
   const s = signOf(min);
   const style = { fontSize: size };
   if (dayDelta !== undefined && dayDelta >= 60)
     return (
       <Stamp className={cx("-rotate-[8deg] border-[3px] border-current px-3 py-1 text-yellow", className)} style={style}>
-        objectif pulvérisé
+        {tr("common.stampCrushed")}
       </Stamp>
     );
   if (s > 0)
     return (
       <Stamp className={cx("-rotate-6 border-[3px] border-current px-3 py-1 font-label text-yellow", className)} style={style}>
-        EN AVANCE !
+        {tr("common.stampAhead")}
       </Stamp>
     );
   if (s < 0)
     return (
       <Stamp className={cx("-rotate-[5deg] bg-red px-3 py-1 text-white", className)} style={style}>
-        ▼ en retard
+        {tr("common.stampBehind")}
       </Stamp>
     );
   return (
     <Stamp className={cx("-rotate-6 border-[3px] border-current px-3 py-1 text-paper", className)} style={style}>
-      = à l'équilibre
+      {tr("common.stampEven")}
     </Stamp>
   );
 }
 
 export function halfLabel(mark: DayMark): string {
-  if (mark.portion >= 1) return "journée";
-  if (mark.note === "matin") return "matin";
-  if (mark.note === "apres-midi") return "après-midi";
-  return "demi-journée";
+  // `note` holds the stored half-day marker ("matin" / "apres-midi"): data values, not UI text.
+  if (mark.portion >= 1) return tr("common.halfFull");
+  if (mark.note === "matin") return tr("common.halfMorning");
+  if (mark.note === "apres-midi") return tr("common.halfAfternoon");
+  return tr("common.halfDay");
 }
 
-const MARK_TEXT: Record<DayMark["type"], string> = {
-  conge: "congé",
-  maladie: "maladie",
-  ferie: "férié",
-  rtt: "RTT",
-  travail: "jour travaillé",
-};
+const MARK_TEXT = {
+  conge: "common.markLeave",
+  maladie: "common.markSick",
+  ferie: "common.markHoliday",
+  rtt: "common.markCompTime",
+  travail: "common.markWorked",
+} as const satisfies Record<DayMark["type"], string>;
 const MARK_STYLE: Record<DayMark["type"], string> = {
   conge: "bg-blue text-white",
   maladie: "shadow-[inset_0_0_0_2px_var(--color-blue)] text-paper",
@@ -182,18 +193,18 @@ const MARK_STYLE: Record<DayMark["type"], string> = {
   travail: "bg-ink shadow-[inset_0_0_0_2px_var(--color-yellow)] text-yellow",
 };
 
-/** Texte court du type de journée ("congé · matin", "férié · 11 novembre"). */
+/** Short day-type text ("leave · morning", "holiday · 11 November"). */
 export function dayTypeText(day: Pick<DayResult, "mark" | "holiday">): string | null {
   const { mark, holiday } = day;
   if (mark) {
-    const base = MARK_TEXT[mark.type];
+    const base = tr(MARK_TEXT[mark.type]);
     if (mark.type === "travail") return holiday ? `${base} · ${holiday}` : base;
     return mark.portion < 1 ? `${base} · ${halfLabel(mark)}` : base;
   }
-  return holiday ? `férié · ${holiday}` : null;
+  return holiday ? tr("common.holidayNamed", { name: holiday }) : null;
 }
 
-/** Badge du type de journée, ou rien pour une journée normale. */
+/** Day-type badge, or nothing for a normal day. */
 export function DayTypeBadge({ day, className }: { day: Pick<DayResult, "mark" | "holiday">; className?: string }) {
   const text = dayTypeText(day);
   if (!text) return null;
@@ -201,7 +212,7 @@ export function DayTypeBadge({ day, className }: { day: Pick<DayResult, "mark" |
   return <span className={cx("inline-block px-2 py-0.5 font-label uppercase", style, className)}>{text}</span>;
 }
 
-/* ─────────────── Frise de la journée ─────────────── */
+/* ─────────────── Day ribbon ─────────────── */
 
 type Tick = { at: number; label: string; prio: number; now?: boolean };
 
@@ -232,7 +243,7 @@ export function DayRibbon({
   const pauses = intervals.slice(1).map((it, i) => ({ a: intervals[i].b, b: it.a }));
   const longest = pauses.reduce<{ a: number; b: number } | null>((best, p) => (!best || p.b - p.a > best.b - best.a ? p : best), null);
 
-  // Repères : bornes des périodes, maintenant, sortie prévue, bornes de l'axe ; on évite les chevauchements.
+  // Tick marks: period bounds, now, planned exit, axis bounds; overlapping ticks are dropped.
   const ticks: Tick[] = [];
   if (isToday) ticks.push({ at: nowMin, label: formatClock(now), prio: 0, now: true });
   intervals.forEach((it) => {
@@ -262,7 +273,7 @@ export function DayRibbon({
         {intervals.map((it, i) => (
           <div
             key={i}
-            title={`${formatClock(it.start)} → ${it.open ? "en cours" : formatClock(it.end)} · ${dur(it.minutes)}`}
+            title={`${formatClock(it.start)} → ${it.open ? tr("common.inProgress") : formatClock(it.end)} · ${dur(it.minutes)}`}
             className={it.open ? "absolute bg-yellow" : "absolute bg-paper"}
             style={{
               left: `${pct(it.a)}%`,
@@ -275,14 +286,14 @@ export function DayRibbon({
         ))}
         {endMin !== null && (
           <div
-            title={`Journée complète à ${formatClock(endForDayAt!)}`}
+            title={tr("common.ribbonFullDayAt", { time: formatClock(endForDayAt!) })}
             className="absolute box-border border-2 border-dashed border-yellow"
             style={{ left: `${pct(nowMin)}%`, width: `${pct(endMin) - pct(nowMin)}%`, top: barTop, height: barH }}
           />
         )}
         {day?.danglingPunch && (
           <div
-            title="Sortie manquante : cette entrée n'est pas comptée"
+            title={tr("common.ribbonMissingExit")}
             className="absolute w-1 bg-pink"
             style={{ left: `${pct(minutesOfDay(day.danglingPunch.ts))}%`, top: barTop, height: barH }}
           />
@@ -292,7 +303,7 @@ export function DayRibbon({
             className="absolute font-label text-[15px] whitespace-nowrap text-paper-muted"
             style={{ left: `${(pct(longest.a) + pct(longest.b)) / 2}%`, top: H / 2 - 12, transform: "translateX(-50%)" }}
           >
-            casse-croûte {dur(longest.b - longest.a)}
+            {tr("common.ribbonBreak", { dur: dur(longest.b - longest.a) })}
           </div>
         )}
         {isToday && (
@@ -322,18 +333,15 @@ export function DayRibbon({
   );
 }
 
-/** Somme des pauses (écarts entre périodes) d'une journée. */
+/** Total of the breaks (gaps between periods) in a day. */
 export function pauseMinutes(day: DayResult | null): number {
   if (!day) return 0;
   return day.intervals.slice(1).reduce((a, it, i) => a + (it.start - day.intervals[i].end) / 60000, 0);
 }
 
-/* ─────────────── Semaine en 7 cases ─────────────── */
+/* ─────────────── Week in 7 cells ─────────────── */
 
-const WD_LONG = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"];
-const WD_LETTER = ["L", "M", "M", "J", "V", "S", "D"];
-
-/** `selected` : jour mis en avant (par défaut aujourd'hui). `onPick` : cases passées cliquables. */
+/** `selected`: highlighted day (today by default). `onPick`: makes past cells clickable. */
 export function WeekStrip({
   week,
   compact = false,
@@ -353,12 +361,12 @@ export function WeekStrip({
       )}
     >
       {week.map((d, i) => {
-        const name = compact ? WD_LETTER[i] : WD_LONG[i];
+        const name = compact ? dayLetter(i + 1) : dayShort(i + 1).toUpperCase();
         const weekend = i >= 5;
         const quiet = !d || d.isFuture || (weekend && d.workedMin === 0);
         const type = d ? dayTypeText(d) : null;
         const pick = onPick && d && !d.isFuture ? () => onPick(d.date) : undefined;
-        // Fonction (pas composant) : le tableau de bord re-rend chaque seconde, les cases ne doivent pas être remontées.
+        // A function, not a component: the dashboard re-renders every second and the cells must not be remounted.
         const cell = (className: string, hover: string, children: ReactNode, title?: string) =>
           pick ? (
             <button key={i} type="button" title={title} className={cx(className, hover, "cursor-pointer text-left")} onClick={pick}>
@@ -380,7 +388,7 @@ export function WeekStrip({
               {!compact && (
                 <>
                   <br />
-                  {d.present ? "en cours" : d.targetMin > 0 || d.workedMin > 0 ? signed(d.deltaMin) : type ?? "—"}
+                  {d.present ? tr("common.inProgress") : d.targetMin > 0 || d.workedMin > 0 ? signed(d.deltaMin) : type ?? "—"}
                 </>
               )}
             </>,
@@ -418,7 +426,7 @@ export function WeekStrip({
   );
 }
 
-/* ─────────────── Indicateurs ─────────────── */
+/* ─────────────── Indicators ─────────────── */
 
 type KpiTone = "line" | "red" | "yellow" | "pink";
 const KPI_TONE: Record<KpiTone, string> = {
@@ -441,7 +449,7 @@ export function Kpi({
   tone?: KpiTone;
   rotate?: number;
   className?: string;
-  /** Rend l'indicateur cliquable (ex. : ouvrir le jour concerné). */
+  /** Makes the indicator clickable (e.g. to open the day concerned). */
   onClick?: () => void;
 }) {
   const Tag = onClick ? "button" : "div";
@@ -463,11 +471,11 @@ export function Kpi({
   );
 }
 
-/** Ton d'un indicateur signé : bloc jaune si ≥ 0, bloc rouge sinon. */
+/** Tone of a signed indicator: yellow block if ≥ 0, red block otherwise. */
 export const toneOf = (min: number): KpiTone => (signOf(min) < 0 ? "red" : "yellow");
 export const arrowOf = (min: number) => (signOf(min) > 0 ? "▲" : signOf(min) < 0 ? "▼" : "=");
 
-/* ─────────────── Contrôles ─────────────── */
+/* ─────────────── Controls ─────────────── */
 
 export function Segmented<T extends string>({
   value,
@@ -529,7 +537,7 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
   );
 }
 
-/** Bouton qui ouvre le calendrier natif du navigateur pour choisir un jour. */
+/** Button that opens the browser's native calendar to pick a day. */
 export function DayPickerButton({
   value,
   max,
@@ -593,6 +601,30 @@ export function Checkbox({ checked, onChange, children }: { checked: boolean; on
       </span>
       {children}
     </label>
+  );
+}
+
+/** Provisional FR/EN switch; the account-level language setting will replace it. */
+export function LangSwitch({ className }: { className?: string }) {
+  const t = useT();
+  const { locale, setLocale } = useLocale();
+  return (
+    <div role="group" aria-label={t("common.language")} className={cx("flex gap-1 font-label text-sm", className)}>
+      {LOCALES.map((l) => (
+        <button
+          key={l}
+          type="button"
+          aria-pressed={l === locale}
+          onClick={() => setLocale(l)}
+          className={cx(
+            "min-h-8 cursor-pointer px-2",
+            l === locale ? "-rotate-2 bg-yellow text-onpaper" : "text-paper-muted hover:text-paper",
+          )}
+        >
+          {t(l === "fr" ? "common.languageFr" : "common.languageEn")}
+        </button>
+      ))}
+    </div>
   );
 }
 

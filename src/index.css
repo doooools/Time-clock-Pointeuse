@@ -1,12 +1,21 @@
 @import "tailwindcss";
 
-/* Direction « Giscard punk » : photocopie, scotch, lettres découpées. Aucun arrondi. */
+/*
+ * Re-skinning: every colour, font and shadow of the UI is a design token declared in the @theme block below
+ * (--color-*, --font-*, --shadow-*). Change the values there and the whole app follows; components only use
+ * Tailwind classes built from these tokens (bg-yellow, text-paper, font-display...). The reusable pieces
+ * (buttons, fields, paper cards, tape) are the @utility blocks further down.
+ */
+
+/* "Giscard punk" direction: photocopy, tape, cut-out letters. No rounded corners. */
 @theme {
   --font-display: "Anton", "Impact", sans-serif;
   --font-label: "Special Elite", "Courier New", monospace;
   --font-mono: "Courier Prime", "Courier New", monospace;
 
   --color-ink: oklch(0.13 0 0);
+  --color-white: #fff;
+  --color-black: #000;
   --color-onpaper: #111;
   --color-paper: oklch(0.95 0.01 90);
   --color-paper-muted: oklch(0.75 0.01 90);
@@ -24,9 +33,9 @@
   --color-blue-heat: oklch(0.36 0.1 262);
   --color-tape: oklch(0.9 0.05 90 / 0.7);
 
-  --shadow-toast: 6px 6px 0 #000;
-  --shadow-modal: 10px 10px 0 #000;
-  --shadow-hard: 4px 4px 0 #000;
+  --shadow-toast: 6px 6px 0 var(--color-black);
+  --shadow-modal: 10px 10px 0 var(--color-black);
+  --shadow-hard: 4px 4px 0 var(--color-black);
 }
 
 @layer base {
@@ -43,7 +52,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Trame photocopie sur tout l'écran. */
+  /* Photocopy screen texture over the whole viewport. */
   body::after {
     content: "";
     position: fixed;
@@ -67,7 +76,7 @@
   }
 }
 
-/* Libellé de bloc (Special Elite, capitales) */
+/* Block label (Special Elite, upper case) */
 @utility lbl {
   font-family: var(--font-label);
   font-size: 15px;
@@ -76,7 +85,7 @@
   text-transform: uppercase;
 }
 
-/* Titre d'écran : Anton sur papier, de travers */
+/* Screen title: Anton on paper, tilted */
 @utility page-title {
   display: inline-block;
   font-family: var(--font-display);
@@ -139,7 +148,7 @@
     background: var(--color-coal);
   }
 }
-/* Boutons sur carte papier */
+/* Buttons on a paper card */
 @utility btn-ink {
   @apply btn;
   background: var(--color-onpaper);
@@ -154,11 +163,11 @@
   color: var(--color-onpaper);
   box-shadow: inset 0 0 0 2px var(--color-onpaper);
   &:hover:not(:disabled) {
-    background: #fff;
+    background: var(--color-white);
   }
 }
 
-/* Champ sur fond sombre */
+/* Field on a dark background */
 @utility field {
   border: 2px solid var(--color-paper);
   background: transparent;
@@ -177,10 +186,10 @@
     border: 3px solid var(--color-red-text);
   }
 }
-/* Champ sur carte papier */
+/* Field on a paper card */
 @utility field-paper {
   border: 2px solid var(--color-onpaper);
-  background: #fff;
+  background: var(--color-white);
   color: var(--color-onpaper);
   padding: 6px 10px;
   font-family: var(--font-mono);
@@ -195,14 +204,14 @@
   }
 }
 
-/* Carte « papier scotché » */
+/* "Taped paper" card */
 @utility paper-card {
   position: relative;
   background: var(--color-paper);
   color: var(--color-onpaper);
 }
 
-/* Bande de scotch qui déborde du haut d'une carte */
+/* Strip of tape sticking out of the top of a card */
 @utility tape {
   position: absolute;
   top: -12px;
@@ -216,7 +225,7 @@
   background: repeating-linear-gradient(45deg, var(--color-onpaper) 0 4px, transparent 4px 8px);
 }
 
-/* Libellés de date native en sombre */
+/* Native date/time picker indicator */
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
   cursor: pointer;

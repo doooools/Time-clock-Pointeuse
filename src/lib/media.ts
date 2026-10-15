@@ -14,5 +14,5 @@ export function useMediaQuery(query: string): boolean {
   return match;
 }
 
-/** Mise en page bureau (≥ 1024 px) ; en dessous, variante mobile. */
+/** Desktop layout (≥ 1024 px); below that, the mobile variant. */
 export const useIsDesktop = () => useMediaQuery(DESKTOP);
