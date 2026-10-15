@@ -219,10 +219,10 @@ function StepList({ defs }: { defs: StepDef[] }) {
               <Tip tone={d.tip.tone}>
                 <Rich text={t(key(d.tip.text))} />
                 {d.tip.vars && (
-                  <span className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-sm">
+                  <span className="mt-2 grid grid-cols-1 gap-y-0.5 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-4">
                     {VAR_KEYS.map(([v, k]) => (
                       <span key={v} className="contents">
-                        <code className="bg-coal px-1.5 py-px break-words text-yellow">{v}</code>
+                        <code className="mt-1.5 w-fit max-w-full bg-coal px-1.5 py-px break-all text-yellow sm:mt-0">{v}</code>
                         <span className="text-paper-muted">
                           <Rich text={t(key(k))} />
                         </span>

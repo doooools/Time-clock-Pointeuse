@@ -149,14 +149,14 @@ function Shell() {
       </main>
 
       {/* Mobile tab bar */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t-[3px] border-onpaper bg-paper pb-[env(safe-area-inset-bottom)] font-label text-xs text-onpaper lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t-[3px] border-onpaper bg-paper pb-[env(safe-area-inset-bottom)] font-label text-[11px] min-[400px]:text-xs text-onpaper lg:hidden">
         {NAV.map(({ to, label, short, glyph }) => (
           <NavLink
             key={to}
             to={to}
             end={to === "/"}
             className={({ isActive }) =>
-              `flex h-[68px] flex-col items-center justify-center gap-[3px] ${isActive ? "bg-yellow" : ""}`
+              `flex h-[68px] min-w-0 flex-col items-center justify-center gap-[3px] px-0.5 ${isActive ? "bg-yellow" : ""}`
             }
           >
             <b aria-hidden className="font-display text-lg font-normal">

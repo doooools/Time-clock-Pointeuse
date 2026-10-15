@@ -80,7 +80,7 @@ docker run --rm -v opointeuse_opointeuse-data:/data -v "$PWD":/backup alpine \
 docker compose start
 ```
 
-(The actual volume name is prefixed with the Compose project, usually the folder name: check with `docker volume ls`.)
+(The volume name in the command above assumes the project folder is called `opointeuse`. Compose prefixes the volume with the project name, which defaults to the folder name, so a clone in another folder gives another name. Find yours with `docker volume ls | grep opointeuse-data` and use it in `-v <name>:/data`.)
 
 To restore, stop the container, put the database file back into the volume as `opointeuse.db` (removing leftover
 `-wal` and `-shm` files), and start again.

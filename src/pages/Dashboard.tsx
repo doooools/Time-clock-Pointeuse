@@ -50,8 +50,8 @@ function ExitCard({
       <div className={cx("font-display text-4xl lg:text-[50px] lg:leading-tight", muted && "text-paper-dim")}>{time}</div>
       {reached ? (
         <>
-          <div className="font-label text-[13px] text-yellow lg:hidden">✓ {reached}</div>
-          <div className="hidden lg:block">
+          <div className="font-label text-[13px] text-yellow min-[1400px]:hidden">✓ {reached}</div>
+          <div className="hidden min-[1400px]:block">
             <Stamp className="absolute top-[34px] right-2.5 -rotate-12 border-[3px] border-current px-2 py-0.5 text-[22px] text-yellow">
               ✓ {reached}
             </Stamp>
@@ -220,14 +220,14 @@ export default function Dashboard() {
             {day && <DayTypeBadge day={day} className="-rotate-2" />}
           </div>
 
-          <div className="flex items-end gap-2.5 lg:min-h-[190px]">
+          <div className="flex items-end gap-2.5 lg:min-h-[190px] lg:flex-wrap lg:gap-y-3">
             <Ransom min={st.liveBalanceMin} className="mt-1.5 gap-[5px] text-[74px] lg:gap-2.5 lg:text-[118px] xl:text-[150px]" />
             {heroNote ? (
               <span className="mb-3.5 ml-[18px] hidden max-w-[230px] font-label text-lg leading-[1.3] text-paper-muted lg:block">
                 {heroNote}
               </span>
             ) : (
-              <div className="mb-5 ml-[22px] hidden lg:block">
+              <div className="mb-5 ml-[22px] hidden lg:block lg:mb-3">
                 <BalanceStamp min={st.liveBalanceMin} dayDelta={st.targetMin > 0 ? dayDelta : undefined} />
               </div>
             )}

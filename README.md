@@ -10,8 +10,10 @@ punch is recorded, entry or exit is worked out for you, and the web app shows yo
 It is built for one person or a small team, and runs on Cloudflare Workers + D1 (free tier), on any Node server, or
 in Docker.
 
-<!-- Screenshots: add them to docs/images/ and link them here, e.g.
-![Today](docs/images/today.png) ![History](docs/images/history.png) ![Stats](docs/images/stats.png) -->
+![Today: live balance and worked time](docs/images/today.png)
+![History: editable punches](docs/images/history.png)
+![Stats: weeks, months and heat map](docs/images/stats.png)
+<img src="docs/images/today-mobile.png" alt="Today on a phone" width="240">
 
 ## Features
 

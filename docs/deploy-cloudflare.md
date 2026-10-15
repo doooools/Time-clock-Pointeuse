@@ -183,4 +183,5 @@ some CPU time at login; this is well within the free CPU budget for normal use.
 | Login impossible, no account | Create one (step 7). |
 | Login answers 429 "Too many failed attempts" | The account is locked for 15 min after 10 wrong passwords. Wait, or `npm run user -- unlock <username> --d1-remote`. |
 | An API call from a script answers 415 | Add `-H 'Content-Type: application/json'` to requests with a body. |
+| On Windows, `wrangler … --local` answers `internal error; reference=…` | The project path is very long: the local D1 file under `.wrangler/state/v3/d1/` exceeds the 260-character Windows path limit. Clone into a short path such as `C:\src\opointeuse`, or add `--persist-to <short path>`. |
 | Punches have the wrong day or hour | Set the account's time zone in Settings, or `DEFAULT_TIMEZONE`. |
