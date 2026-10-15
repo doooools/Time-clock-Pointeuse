@@ -330,6 +330,10 @@ async function remove(a: ParsedArgs, ctx: Ctx, t: Target) {
   await t.db.batch([
     t.db.prepare("DELETE FROM punches WHERE user_id = ?").bind(user.id),
     t.db.prepare("DELETE FROM day_marks WHERE user_id = ?").bind(user.id),
+    t.db.prepare("DELETE FROM notifications WHERE user_id = ?").bind(user.id),
+    t.db.prepare("DELETE FROM notifications WHERE audit_id IN (SELECT id FROM audit_log WHERE subject_id = ?)").bind(user.id),
+    t.db.prepare("DELETE FROM audit_log WHERE subject_id = ?").bind(user.id),
+    t.db.prepare("UPDATE audit_log SET actor_id = NULL WHERE actor_id = ?").bind(user.id),
   ]);
   // The account is gone: the entry keeps its id as target and what identified it in `before`.
   await logCli(t, user.id, "user.delete", { before: { username: user.username, displayName: user.display_name, role: user.role } });

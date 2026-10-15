@@ -43,12 +43,17 @@ describe("recordChange: notification rules", () => {
     expect((await recipients(env)).map((r) => r.user_id)).toEqual([owner.row.id, admin.row.id]);
   });
 
-  it("an owner or admin changing their own data notifies nobody", async () => {
-    const { env, owner, admin } = await team();
+  it("an owner changing their own data notifies nobody", async () => {
+    const { env, owner } = await team();
     await recordChange(env.DB, { actorId: owner.row.id, subjectId: owner.row.id, action: "punch.update", target: "1" });
-    await recordChange(env.DB, { actorId: admin.row.id, subjectId: admin.row.id, action: "mark.clear", target: "2025-03-12" });
-    expect(await auditCount(env)).toBe(2);
+    expect(await auditCount(env)).toBe(1);
     expect(await recipients(env)).toEqual([]);
+  });
+
+  it("an admin changing their own data notifies the active owners only", async () => {
+    const { env, owner, admin } = await team();
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: admin.row.id, action: "mark.clear", target: "2025-03-12" });
+    expect(await recipients(env)).toEqual([{ user_id: owner.row.id, action: "mark.clear" }]);
   });
 
   it("the CLI (actorId null) notifies the data owner", async () => {
@@ -60,12 +65,40 @@ describe("recordChange: notification rules", () => {
     expect(row).toEqual({ actor_id: null, source: "cli" });
   });
 
-  it("account actions are logged without notifications", async () => {
+  it("a password, role or rights change by someone else notifies the account concerned", async () => {
+    const { env, admin, bob, carol } = await team();
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: bob.row.id, action: "user.update", after: { password: "reset" } });
+    await recordChange(env.DB, { actorId: null, subjectId: carol.row.id, action: "user.update", source: "cli", before: { role: "user" }, after: { role: "admin" } });
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: carol.row.id, action: "user.update", after: { permissions: { viewTeam: true } } });
+    expect((await recipients(env)).map((r) => r.user_id)).toEqual([bob.row.id, carol.row.id, carol.row.id]);
+  });
+
+  it("a token regeneration by someone else notifies the account concerned", async () => {
     const { env, admin, bob } = await team();
-    for (const action of ["user.create", "user.update", "user.token", "user.unlock"] as const) {
-      await recordChange(env.DB, { actorId: admin.row.id, subjectId: bob.row.id, action });
-    }
-    expect(await auditCount(env)).toBe(4);
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: bob.row.id, action: "user.token" });
+    await recordChange(env.DB, { actorId: null, subjectId: bob.row.id, action: "user.token", source: "cli" });
+    expect(await recipients(env)).toEqual([
+      { user_id: bob.row.id, action: "user.token" },
+      { user_id: bob.row.id, action: "user.token" },
+    ]);
+  });
+
+  it("changing your own password, role or token notifies nobody", async () => {
+    const { env, bob } = await team();
+    await recordChange(env.DB, { actorId: bob.row.id, subjectId: bob.row.id, action: "user.update", after: { password: "reset" } });
+    await recordChange(env.DB, { actorId: bob.row.id, subjectId: bob.row.id, action: "user.token" });
+    expect(await auditCount(env)).toBe(2);
+    expect(await recipients(env)).toEqual([]);
+  });
+
+  it("other account actions are logged without notifications", async () => {
+    const { env, admin, bob } = await team();
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: bob.row.id, action: "user.create" });
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: bob.row.id, action: "user.unlock" });
+    await recordChange(env.DB, { actorId: null, subjectId: bob.row.id, action: "user.unlock", source: "cli" });
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: bob.row.id, action: "user.update", after: { disabled: true } });
+    await recordChange(env.DB, { actorId: admin.row.id, subjectId: bob.row.id, action: "user.update", after: { displayName: "B" } });
+    expect(await auditCount(env)).toBe(5);
     expect(await recipients(env)).toEqual([]);
   });
 

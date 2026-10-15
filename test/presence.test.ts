@@ -106,6 +106,19 @@ describe("GET /api/team/presence: content", () => {
     expect(byId.get(utcUser.row.id)).toMatchObject({ present: false, since: null, lastPunch: utc(11, 12) });
   });
 
+  it("lastPunch is limited to today and yesterday in the member's zone", async () => {
+    const env = makeEnv();
+    const owner = await addUser(env, "olive", { role: "owner" });
+    const yesterday = await addUser(env, "yes");
+    const older = await addUser(env, "old");
+    await punch(env, yesterday.row, utc(11, 0, 30)); // yesterday 00:30 UTC
+    await punch(env, older.row, utc(10, 23, 30)); // two days ago
+    const members = (await owner.client.get("/api/team/presence")).body.members as Array<{ id: number; lastPunch: number | null }>;
+    const byId = new Map(members.map((m) => [m.id, m]));
+    expect(byId.get(yesterday.row.id)!.lastPunch).toBe(utc(11, 0, 30));
+    expect(byId.get(older.row.id)!.lastPunch).toBeNull();
+  });
+
   it("an entry before midnight does not make someone present after midnight", async () => {
     const env = makeEnv();
     const owner = await addUser(env, "olive", { role: "owner" });

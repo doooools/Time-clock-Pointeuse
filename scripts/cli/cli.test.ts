@@ -354,6 +354,23 @@ describe("roles, rights and journal", () => {
     expect((await target.db.prepare("SELECT COUNT(*) AS n FROM notifications").first<{ n: number }>())!.n).toBe(1);
   });
 
+  it("remove clears the account's change log and notifications, keeping only the user.delete entry", async () => {
+    const target = sqliteTarget();
+    const h = (stdin = "") => makeCtx(target, stdin);
+    await runCli(["add", "alice", "--generate-password"], h().ctx);
+    await runCli(["add", "bob", "--generate-password"], h().ctx);
+    await runCli(["import", "bob", "-"], h("25/09/2026 08:12\n25/09/2026 12:01\n").ctx);
+    await runCli(["passwd", "bob", "--generate-password"], h().ctx);
+    const count = async (table: string) =>
+      (await target.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
+    expect(await count("notifications")).toBe(2);
+    expect(await runCli(["remove", "bob", "--yes"], h().ctx)).toBe(0);
+    expect(await count("notifications")).toBe(0);
+    const log = await entries(target);
+    expect(log.filter((e) => e.action === "user.delete")).toHaveLength(1);
+    expect(log.filter((e) => e.subject_id !== null && e.action !== "user.create" || e.action === "punch.import")).toEqual([]);
+  });
+
   it("creates the demo team, with an owner first, and refuses to run twice without --yes", async () => {
     const target = sqliteTarget();
     const h = () => makeCtx(target);

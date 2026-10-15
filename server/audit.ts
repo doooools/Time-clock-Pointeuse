@@ -40,12 +40,29 @@ function toJson(value: unknown): string | null {
   });
 }
 
+/** `user.update` entries whose subject must be told when someone else made them. */
+function touchesAccess(entry: ChangeEntry): boolean {
+  if (entry.action === "user.token") return true;
+  if (entry.action !== "user.update") return false;
+  const after = entry.after as Record<string, unknown> | null | undefined;
+  return !!after && typeof after === "object" && ("password" in after || "role" in after || "permissions" in after);
+}
+
+async function notifySubject(db: Db, auditId: number, userId: number, now: number): Promise<void> {
+  await db
+    .prepare("INSERT INTO notifications (user_id, audit_id, created_at) SELECT id, ?, ? FROM users WHERE id = ?")
+    .bind(auditId, now, userId)
+    .run();
+}
+
 /**
  * Inserts the log entry, then the notifications:
- * - `punch.*` / `mark.*` by someone else than the data owner (admin, or CLI with `actorId = null`)
- *   → the owner is notified;
- * - by the owner with role `user` → every active owner and admin is notified;
- * - by an owner or admin on their own data → nobody.
+ * - `punch.*` / `mark.*` by someone else than the data owner (admin, owner, or CLI with `actorId = null`)
+ *   → the data owner;
+ * - by the owner with role `user` → every active owner and admin; with role `admin` → every active owner;
+ *   with role `owner` → nobody;
+ * - `user.update` that changes the password, role or rights, and `user.token`, made by someone else than the
+ *   account concerned (or the CLI) → the account concerned. Other `user.*` actions notify nobody.
  * `user.delete` is stored without a subject (the account is gone): pass the deleted id as `target` and
  * `{ username, displayName, role }` as `before`.
  * Never throws: the mutation already happened, a logging failure is reported on the console only.
@@ -69,24 +86,26 @@ export async function recordChange(db: Db, entry: ChangeEntry, now = Date.now())
         entry.source ?? "web",
       )
       .first<{ id: number }>();
-    if (!row || !isDataAction(entry.action)) return;
+    if (!row) return;
 
-    if (entry.actorId !== entry.subjectId) {
-      await db
-        .prepare("INSERT INTO notifications (user_id, audit_id, created_at) SELECT id, ?, ? FROM users WHERE id = ?")
-        .bind(row.id, now, entry.subjectId)
-        .run();
-    } else {
-      // The owner changed their own data: notify the managers, only if the owner is a plain user.
-      await db
-        .prepare(
-          `INSERT INTO notifications (user_id, audit_id, created_at)
-           SELECT id, ?, ? FROM users
-           WHERE role IN ('owner', 'admin') AND disabled_at IS NULL AND id <> ?
-             AND EXISTS (SELECT 1 FROM users WHERE id = ? AND role = 'user')`,
-        )
-        .bind(row.id, now, entry.subjectId, entry.subjectId)
-        .run();
+    if (isDataAction(entry.action)) {
+      if (entry.actorId !== entry.subjectId) {
+        await notifySubject(db, row.id, entry.subjectId, now);
+      } else {
+        // Own data: a user is watched by owners and admins, an admin by owners, an owner by nobody.
+        await db
+          .prepare(
+            `INSERT INTO notifications (user_id, audit_id, created_at)
+             SELECT id, ?, ? FROM users
+             WHERE disabled_at IS NULL AND id <> ?
+               AND ((role = 'owner' AND (SELECT role FROM users WHERE id = ?) IN ('user', 'admin'))
+                 OR (role = 'admin' AND (SELECT role FROM users WHERE id = ?) = 'user'))`,
+          )
+          .bind(row.id, now, entry.subjectId, entry.subjectId, entry.subjectId)
+          .run();
+      }
+    } else if (touchesAccess(entry) && entry.actorId !== entry.subjectId) {
+      await notifySubject(db, row.id, entry.subjectId, now);
     }
   } catch (err) {
     console.error("recordChange failed", entry.action, err);

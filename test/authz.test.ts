@@ -90,11 +90,14 @@ describe("rights withdrawn during a session", () => {
     expect((await admin.client.get("/api/notifications")).body.notifications).toHaveLength(2);
 
     await owner.client.patch(`/api/admin/users/${admin.row.id}`, { role: "user" });
-    const left = (await admin.client.get("/api/notifications")).body.notifications;
-    expect(left.map((n: { entry: { subject: { id: number } } }) => n.entry.subject.id)).toEqual([admin.row.id]);
+    // (The role change itself also notifies the admin, see C10 bis: only hours entries are checked here.)
+    type Notif = { entry: { action: string; subject: { id: number } } };
+    const hours = async () =>
+      (await admin.client.get("/api/notifications")).body.notifications.filter((n: Notif) => n.entry.action.startsWith("punch."));
+    expect(await hours().then((l: Notif[]) => l.map((n) => n.entry.subject.id))).toEqual([admin.row.id]);
     // With viewTeam the colleague's hours are readable again, as in the journal.
     await owner.client.patch(`/api/admin/users/${admin.row.id}`, { permissions: { viewTeam: true } });
-    expect((await admin.client.get("/api/notifications")).body.notifications).toHaveLength(2);
+    expect(await hours()).toHaveLength(2);
   });
 
   it("a disabled account loses every team route at once", async () => {

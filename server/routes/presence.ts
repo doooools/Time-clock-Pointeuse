@@ -12,7 +12,7 @@ export type PresenceMember = {
   present: boolean;
   /** Time of that entry when present, else null. */
   since: number | null;
-  /** Latest punch up to now (any day), or null. */
+  /** Latest punch up to now, only if it falls today or yesterday in the member's zone, else null. */
   lastPunch: number | null;
 };
 
@@ -37,7 +37,7 @@ export function presenceOf(
     displayName,
     present: day.present,
     since: open ? open.start : null,
-    lastPunch,
+    lastPunch: lastPunch !== null && dayKey(lastPunch, settings.timezone) >= dayKey(now - DAY_MS, settings.timezone) ? lastPunch : null,
   };
 }
 
