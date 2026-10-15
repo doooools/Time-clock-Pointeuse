@@ -94,8 +94,9 @@ describe("team: member list", () => {
       expect(res.body.members).toHaveLength(7);
       expect(res.body.members.map((m: { id: number }) => m.id)).not.toContain(user.row.id);
       expect(res.body.members[0]).toEqual({ id: owner.row.id, displayName: "Olive", role: "owner" });
-      // No display name: the username stands in.
-      expect(res.body.members.find((m: { id: number }) => m.id === viewer.row.id)).toEqual({ id: viewer.row.id, displayName: "vera", role: "user" });
+      // No display name: one's own username stands in, never a colleague's (neutral "Member #id").
+      const vera = res.body.members.find((m: { id: number }) => m.id === viewer.row.id);
+      expect(vera).toEqual({ id: viewer.row.id, displayName: u === viewer ? "vera" : `Member #${viewer.row.id}`, role: "user" });
       expect(JSON.stringify(res.body)).not.toMatch(/"username"|"disabled"/);
     }
   });
@@ -124,7 +125,13 @@ describe("team: reading a member's data", () => {
     const read = async (actor: TestUser, subject: TestUser) => {
       const res = await actor.client.get(`/api/team/${subject.row.id}/data`);
       expect(res.status, `${actor.row.username} reads ${subject.row.username}`).toBe(200);
-      expect(res.body.user).toMatchObject({ id: subject.row.id, username: subject.row.username });
+      // A plain user never gets a colleague's username (login identifier); managers and oneself do.
+      if (actor.row.role === "user" && actor !== subject) {
+        expect(res.body.user).toEqual({ id: subject.row.id, displayName: expect.any(String), role: subject.row.role });
+        expect(res.text).not.toContain(`"${subject.row.username}"`);
+      } else {
+        expect(res.body.user).toMatchObject({ id: subject.row.id, username: subject.row.username });
+      }
       return res.body.canEdit as boolean;
     };
     // Owner: everything, editable.

@@ -3,7 +3,7 @@ import { computeDay, type Punch } from "../../shared/compute";
 import { DAY_MS, dayKey } from "../../shared/time";
 import type { AppEnv, UserRow } from "../env";
 import { fail } from "../http";
-import { capabilities, listUsers, resolveUserSettings } from "../users";
+import { capabilities, listUsers, memberName, resolveUserSettings } from "../users";
 
 export type PresenceMember = {
   id: number;
@@ -17,11 +17,12 @@ export type PresenceMember = {
 };
 
 /**
- * Presence board of the active accounts, for "today" in each account's own time zone.
- * Pure: `today` punches are those of the local day containing `now`, up to `now`.
+ * Presence of one account, for "today" in its own time zone. Pure: `today` punches are those of the local
+ * day containing `now`, up to `now`. `displayName` is the name shown to the viewer (`memberName`).
  */
 export function presenceOf(
-  user: UserRow,
+  user: Pick<UserRow, "id">,
+  displayName: string,
   settings: ReturnType<typeof resolveUserSettings>,
   punches: Punch[],
   lastPunch: number | null,
@@ -33,7 +34,7 @@ export function presenceOf(
   const open = day.intervals.find((i) => i.open);
   return {
     id: user.id,
-    displayName: user.display_name || user.username,
+    displayName,
     present: day.present,
     since: open ? open.start : null,
     lastPunch,
@@ -42,7 +43,8 @@ export function presenceOf(
 
 /** Mounted under `/api` after `requireSession`, before the `/api/team/:id` routes. */
 export const presenceRoutes = new Hono<AppEnv>().get("/team/presence", async (c) => {
-  if (!capabilities(c.get("user")).viewPresence) return fail(c, 403, "forbidden");
+  const viewer = c.get("user");
+  if (!capabilities(viewer).viewPresence) return fail(c, 403, "forbidden");
   const db = c.env.DB;
   const now = Date.now();
   // Any local "today" lies within ±2 days of now (UTC offsets are within ±14 h): one query for every account,
@@ -74,7 +76,14 @@ export const presenceRoutes = new Hono<AppEnv>().get("/team/presence", async (c)
   const members = users
     .filter((u) => u.disabled_at === null)
     .map((u) =>
-      presenceOf(u, resolveUserSettings(c.env, u), byUser.get(u.id) ?? [], lastByUser.get(u.id) ?? null, now),
+      presenceOf(
+        u,
+        memberName(viewer, u, c.get("locale")),
+        resolveUserSettings(c.env, u),
+        byUser.get(u.id) ?? [],
+        lastByUser.get(u.id) ?? null,
+        now,
+      ),
     )
     .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) || a.id - b.id);
   return c.json({ members });

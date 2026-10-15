@@ -41,6 +41,8 @@ const log = (c: Context<AppEnv>, subjectId: number, entry: Omit<ChangeEntry, "ac
 /**
  * The account behind `:id` if the signed-in user may manage it: 404 when unknown, 403 `roleForbidden` for an
  * admin targeting an owner or another admin (only owners manage those).
+ * The decision depends on the target's role: every write below repeats `AND role = <that role>` in its WHERE,
+ * so an account promoted in the meantime is not changed (409 `changedMeanwhile`, see `writeRefused`).
  */
 async function managedTarget(c: Context<AppEnv>): Promise<UserRow | Response> {
   const id = parseId(c.req.param("id"));
@@ -55,6 +57,13 @@ async function managedTarget(c: Context<AppEnv>): Promise<UserRow | Response> {
  * only). Used by the Team page and scripts; the CLI does the same directly on the database.
  * Mounted under `/api/admin`.
  */
+/** Why a guarded write on `target` changed nothing: gone (404), role changed meanwhile (409), last owner (409). */
+async function writeRefused(c: Context<AppEnv>, target: UserRow): Promise<Response> {
+  const now = await getUserById(c.env.DB, target.id);
+  if (!now) return fail(c, 404, "notFound");
+  return fail(c, 409, now.role !== target.role ? "changedMeanwhile" : "lastOwner");
+}
+
 export const adminRoutes = new Hono<AppEnv>()
   .use("*", requireCapability("manageUsers"))
 
@@ -198,15 +207,16 @@ export const adminRoutes = new Hono<AppEnv>()
     if (revokeSessions) sets.push("session_version = session_version + 1");
     if (!sets.length) return c.json({ user: adminUserView(target) });
 
-    // The last-owner guard is part of the UPDATE itself, so concurrent requests cannot bypass it.
+    // The role check and the last-owner guard are part of the UPDATE itself, so concurrent requests cannot
+    // bypass them.
     const guard = guardOwner ? ` AND ${NOT_LAST_ACTIVE_OWNER}` : "";
     const guardValues = guardOwner ? [target.id, target.id] : [];
-    const { meta } = await c.env.DB.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?${guard}`)
-      .bind(...values, target.id, ...guardValues)
+    const { meta } = await c.env.DB.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ? AND role = ?${guard}`)
+      .bind(...values, target.id, target.role, ...guardValues)
       .run();
+    if (!meta.changes) return writeRefused(c, target);
     const updated = await getUserById(c.env.DB, target.id);
     if (!updated) return fail(c, 404, "notFound");
-    if (!meta.changes) return fail(c, 409, "lastOwner");
 
     if (Object.keys(after).length) await log(c, target.id, { action: "user.update", before, after });
     if (explicitUnlock) {
@@ -218,8 +228,8 @@ export const adminRoutes = new Hono<AppEnv>()
   .post("/users/:id/webhook-token", async (c) => {
     const target = await managedTarget(c);
     if (target instanceof Response) return target;
-    const webhookToken = await regenerateWebhookToken(c.env.DB, target.id);
-    if (!webhookToken) return fail(c, 404, "notFound");
+    const webhookToken = await regenerateWebhookToken(c.env.DB, target.id, target.role);
+    if (!webhookToken) return writeRefused(c, target);
     await log(c, target.id, { action: "user.token" });
     return c.json({ webhookToken });
   })
@@ -228,10 +238,10 @@ export const adminRoutes = new Hono<AppEnv>()
   .delete("/users/:id", async (c) => {
     const target = await managedTarget(c);
     if (target instanceof Response) return target;
-    const { meta } = await c.env.DB.prepare(`DELETE FROM users WHERE id = ? AND ${NOT_LAST_ACTIVE_OWNER}`)
-      .bind(target.id, target.id, target.id)
+    const { meta } = await c.env.DB.prepare(`DELETE FROM users WHERE id = ? AND role = ? AND ${NOT_LAST_ACTIVE_OWNER}`)
+      .bind(target.id, target.role, target.id, target.id)
       .run();
-    if (!meta.changes) return fail(c, 409, "lastOwner");
+    if (!meta.changes) return writeRefused(c, target);
     // Belt and braces in case foreign keys are not enforced by the runtime (no-ops otherwise).
     await c.env.DB.batch([
       c.env.DB.prepare("DELETE FROM punches WHERE user_id = ?").bind(target.id),

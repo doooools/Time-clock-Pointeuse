@@ -1,8 +1,9 @@
 // Account storage and settings resolution. Functions take a `Db` (not the Hono context) so the
 // CLI can reuse them.
-import { resolveSettings, sanitizeSettings, type Settings } from "../shared/settings";
+import { resolveSettings, sanitizeSettings, type Locale, type Settings } from "../shared/settings";
 import type { Db } from "./db/types";
 import type { Env, Role, UserRow } from "./env";
+import { msg } from "./messages";
 import { generateToken, hashPassword } from "./passwords";
 
 export const ROLES: Role[] = ["owner", "admin", "user"];
@@ -140,6 +141,27 @@ export function publicUser(u: UserRow): PublicUser {
   return { id: u.id, username: u.username, displayName: u.display_name, role: u.role };
 }
 
+/**
+ * May `viewer` see the username (a login identifier) of account `memberId`? Owners and admins (they manage
+ * accounts) and everyone for their own account; a plain `user` never sees a colleague's.
+ */
+export function canSeeUsername(viewer: Pick<UserRow, "id" | "role">, memberId: number): boolean {
+  return viewer.id === memberId || viewer.role === "owner" || viewer.role === "admin";
+}
+
+/**
+ * Name of an account as shown to `viewer`: its display name, else its username when the viewer may see it
+ * (`canSeeUsername`), else a neutral "Member #id" in the viewer's language.
+ */
+export function memberName(
+  viewer: Pick<UserRow, "id" | "role">,
+  member: { id: number; username: string; display_name: string | null },
+  locale: Locale,
+): string {
+  if (member.display_name) return member.display_name;
+  return canSeeUsername(viewer, member.id) ? member.username : msg(locale, "memberFallback", { id: member.id });
+}
+
 export function meView(u: UserRow): MeView {
   return { ...publicUser(u), permissions: permissions(u), capabilities: capabilities(u) };
 }
@@ -275,9 +297,16 @@ export async function createUser(db: Db, input: NewUser, now = Date.now()): Prom
   }
 }
 
-export async function regenerateWebhookToken(db: Db, userId: number): Promise<string | null> {
+/**
+ * New webhook token for the account. With `expectedRole`, nothing changes unless the account still has that
+ * role (authorization checked on the role, then written atomically: see the admin routes).
+ */
+export async function regenerateWebhookToken(db: Db, userId: number, expectedRole?: Role): Promise<string | null> {
   const token = generateToken();
-  const { meta } = await db.prepare("UPDATE users SET webhook_token = ? WHERE id = ?").bind(token, userId).run();
+  const { meta } = await db
+    .prepare(`UPDATE users SET webhook_token = ? WHERE id = ?${expectedRole ? " AND role = ?" : ""}`)
+    .bind(token, userId, ...(expectedRole ? [expectedRole] : []))
+    .run();
   return meta.changes ? token : null;
 }
 

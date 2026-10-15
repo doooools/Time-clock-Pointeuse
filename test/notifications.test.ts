@@ -116,7 +116,8 @@ describe("notifications API", () => {
         id: expect.any(Number),
         at: expect.any(Number),
         action: "punch.update",
-        actor: { id: admin.row.id, displayName: "adam" },
+        // No display name: a plain user gets a neutral name, never the admin's username.
+        actor: { id: admin.row.id, displayName: `Member #${admin.row.id}` },
         subject: { id: bob.row.id, displayName: "Bob B." },
         target: "7",
         before: { ts: at(8), note: null },

@@ -1,8 +1,8 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { AuditAction } from "../audit";
-import type { AppEnv } from "../env";
+import type { AppEnv, UserRow } from "../env";
 import { fail, parseId, readBody } from "../http";
-import { canViewData, capabilities, getUserById } from "../users";
+import { canViewData, capabilities, getUserById, memberName } from "../users";
 
 export const JOURNAL_LIMIT_DEFAULT = 50;
 export const JOURNAL_LIMIT_MAX = 200;
@@ -29,20 +29,22 @@ type AuditRow = {
   at: number;
   action: AuditAction;
   actor_id: number | null;
-  actor_name: string | null;
+  actor_username: string | null;
+  actor_display: string | null;
   subject_id: number | null;
-  subject_name: string | null;
+  subject_username: string | null;
+  subject_display: string | null;
   target: string | null;
   before: string | null;
   after: string | null;
   source: "web" | "cli";
 };
 
-/** Columns of an entry with actor and subject names (display name, falling back on the username). */
+/** Columns of an entry with its actor's and subject's names (turned into `memberName` by `entryView`). */
 const ENTRY_SELECT = `
   a.id, a.at, a.action, a.target, a.before, a.after, a.source,
-  a.actor_id, COALESCE(NULLIF(ac.display_name, ''), ac.username) AS actor_name,
-  a.subject_id, COALESCE(NULLIF(su.display_name, ''), su.username) AS subject_name
+  a.actor_id, ac.username AS actor_username, ac.display_name AS actor_display,
+  a.subject_id, su.username AS subject_username, su.display_name AS subject_display
   FROM audit_log a
   LEFT JOIN users ac ON ac.id = a.actor_id
   LEFT JOIN users su ON su.id = a.subject_id`;
@@ -56,11 +58,33 @@ function parseJson(text: string | null): unknown {
   }
 }
 
-function entryView(r: AuditRow): AuditEntryView {
+/**
+ * Entries `viewer` may read, as a SQL condition on `a` (audit_log) and `su` (subject), shared by the journal
+ * and the notifications (a notification stops being readable when the right to see it is withdrawn):
+ * - without `viewTeam`: own entries only;
+ * - `viewTeam` without `manageUsers` (a plain user): also the other accounts' hours (punch.*, mark.*) on
+ *   active accounts, like `canViewData`; never their account administration (user.*);
+ * - `manageUsers` (owner, admin): everything.
+ */
+function visibleEntries(viewer: UserRow): { sql: string; params: unknown[] } {
+  const caps = capabilities(viewer);
+  if (caps.manageUsers) return { sql: "1 = 1", params: [] };
+  if (!caps.viewTeam) return { sql: "a.subject_id = ?", params: [viewer.id] };
+  return {
+    sql: "(a.subject_id = ? OR (su.disabled_at IS NULL AND (a.action LIKE 'punch.%' OR a.action LIKE 'mark.%')))",
+    params: [viewer.id],
+  };
+}
+
+/** API view of a row, with names as the signed-in user may see them (`memberName`). */
+function entryView(c: Context<AppEnv>, r: AuditRow): AuditEntryView {
+  const viewer = c.get("user");
+  const name = (id: number, username: string | null, display: string | null) =>
+    memberName(viewer, { id, username: username ?? "", display_name: display }, c.get("locale"));
   const before = parseJson(r.before);
   let subject: Person;
   if (r.subject_id !== null) {
-    subject = { id: r.subject_id, displayName: r.subject_name ?? "" };
+    subject = { id: r.subject_id, displayName: name(r.subject_id, r.subject_username, r.subject_display) };
   } else {
     // user.delete: the account is gone, its identity was kept in `before`.
     const b = (before ?? {}) as { displayName?: unknown; username?: unknown };
@@ -71,7 +95,8 @@ function entryView(r: AuditRow): AuditEntryView {
     id: r.id,
     at: r.at,
     action: r.action,
-    actor: r.actor_id !== null ? { id: r.actor_id, displayName: r.actor_name ?? "" } : null,
+    actor:
+      r.actor_id !== null ? { id: r.actor_id, displayName: name(r.actor_id, r.actor_username, r.actor_display) } : null,
     subject,
     target: r.target,
     before,
@@ -90,13 +115,10 @@ function queryInt(raw: string | undefined): number | null | undefined {
 export const journalRoutes = new Hono<AppEnv>()
   /**
    * `?userId=&before=&limit=` → `{ entries, next }`, newest first; `next` is the `before` of the next page.
-   * Without `viewTeam`: own entries only. With `viewTeam` but without `manageUsers` (a plain user): other
-   * accounts' entries are limited to their hours (punch.*, mark.*) on active accounts, like `canViewData`.
-   * `manageUsers` (owner, admin): everything, account administration included.
+   * Visibility: `visibleEntries`; `userId` of an account the user may not read → 404.
    */
   .get("/journal", async (c) => {
     const me = c.get("user");
-    const caps = capabilities(me);
     const userId = queryInt(c.req.query("userId"));
     const before = queryInt(c.req.query("before"));
     const rawLimit = queryInt(c.req.query("limit"));
@@ -105,56 +127,48 @@ export const journalRoutes = new Hono<AppEnv>()
     if (before === null) return fail(c, 400, "invalidField", { field: "before" });
     if (limit === null || limit > JOURNAL_LIMIT_MAX) return fail(c, 400, "invalidField", { field: "limit" });
 
-    const where: string[] = [];
-    const params: unknown[] = [];
     if (userId !== undefined && userId !== me.id) {
       // Another account's journal: same answer for "not allowed" and "does not exist" (never reveal existence).
       const subject = await getUserById(c.env.DB, userId);
       if (!subject || !canViewData(me, subject)) return fail(c, 404, "notFound");
     }
-    if (!caps.viewTeam) {
+    const visible = visibleEntries(me);
+    const where = [visible.sql];
+    const params = [...visible.params];
+    if (userId !== undefined) {
       where.push("a.subject_id = ?");
-      params.push(me.id);
-    } else {
-      if (userId !== undefined) {
-        where.push("a.subject_id = ?");
-        params.push(userId);
-      }
-      if (!caps.manageUsers) {
-        where.push(
-          `(a.subject_id = ? OR (su.disabled_at IS NULL AND (a.action LIKE 'punch.%' OR a.action LIKE 'mark.%')))`,
-        );
-        params.push(me.id);
-      }
+      params.push(userId);
     }
     if (before !== undefined) {
       where.push("a.id < ?");
       params.push(before);
     }
     const { results } = await c.env.DB.prepare(
-      `SELECT ${ENTRY_SELECT} ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY a.id DESC LIMIT ?`,
+      `SELECT ${ENTRY_SELECT} WHERE ${where.join(" AND ")} ORDER BY a.id DESC LIMIT ?`,
     )
       .bind(...params, limit + 1)
       .all<AuditRow>();
     const page = results.slice(0, limit);
     return c.json({
-      entries: page.map(entryView),
+      entries: page.map((r) => entryView(c, r)),
       next: results.length > limit ? page[page.length - 1].id : null,
     });
   })
 
-  /** Open (not dismissed) notifications, newest first. */
+  /** Open (not dismissed) notifications, newest first, among the entries the user may still read. */
   .get("/notifications", async (c) => {
+    const me = c.get("user");
+    const visible = visibleEntries(me);
     const { results } = await c.env.DB.prepare(
       `SELECT n.id AS notification_id, n.created_at, ${ENTRY_SELECT}
        JOIN notifications n ON n.audit_id = a.id
-       WHERE n.user_id = ? AND n.dismissed_at IS NULL
+       WHERE n.user_id = ? AND n.dismissed_at IS NULL AND ${visible.sql}
        ORDER BY n.id DESC LIMIT ?`,
     )
-      .bind(c.get("user").id, NOTIFICATIONS_MAX)
+      .bind(me.id, ...visible.params, NOTIFICATIONS_MAX)
       .all<AuditRow & { notification_id: number; created_at: number }>();
     return c.json({
-      notifications: results.map((r) => ({ id: r.notification_id, createdAt: r.created_at, entry: entryView(r) })),
+      notifications: results.map((r) => ({ id: r.notification_id, createdAt: r.created_at, entry: entryView(c, r) })),
     });
   })
 

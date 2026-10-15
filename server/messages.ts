@@ -37,6 +37,9 @@ const en = {
   invalidField: "Invalid field: {field}.",
   usernameTaken: "This username is already taken.",
   lastOwner: "Not allowed: this is the last active owner account.",
+  changedMeanwhile: "This account was changed meanwhile: reload and try again.",
+  // Team
+  memberFallback: "Member #{id}",
   // Webhook
   punchIn: "In {time} · {departure} · balance {balance}",
   punchOut: "Out {time} · {worked} today · balance {balance}",
@@ -79,6 +82,8 @@ const fr: Record<MessageKey, string> = {
   invalidField: "Champ invalide : {field}.",
   usernameTaken: "Cet identifiant est déjà pris.",
   lastOwner: "Interdit : c'est le dernier compte propriétaire actif.",
+  changedMeanwhile: "Ce compte a été modifié entre-temps : rechargez et réessayez.",
+  memberFallback: "Membre n° {id}",
   punchIn: "Entrée {time} · {departure} · solde {balance}",
   punchOut: "Sortie {time} · {worked} aujourd'hui · solde {balance}",
   departureAt: "départ {time}",
