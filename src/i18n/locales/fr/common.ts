@@ -16,8 +16,9 @@ export const common = {
   navStatsShort: "stats",
   navData: "données",
   navSettings: "réglages",
+  accountSettings: "Réglages du compte",
+  logout: "déconnexion",
 
-  readOnlyBanner: "LECTURE SEULE · consultation sans modification possible",
   prevDay: "Jour précédent",
   nextDay: "Jour suivant",
   pickDay: "Choisir le jour à afficher",
@@ -61,7 +62,7 @@ export const common = {
   markSick: "maladie",
   markHoliday: "férié",
   markCompTime: "RTT",
-  markWorked: "jour travaillé",
+  markWorkday: "jour travaillé",
   holidayNamed: "férié · {name}",
 
   // Day ribbon

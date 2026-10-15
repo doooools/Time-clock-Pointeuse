@@ -1,10 +1,11 @@
 import { useRef, type CSSProperties, type ReactNode } from "react";
-import type { DayMark, DayResult } from "../../shared/compute";
+import type { DayMark, DayResult, MarkType } from "../../shared/compute";
 import { fmtDuration } from "../../shared/format";
 import { formatClock, minutesOfDay } from "../../shared/time";
-import { LOCALES, tr, useLocale, useT } from "../i18n";
+import { LOCALES, tr, useLocale, useT, type Locale } from "../i18n";
 import { dayLetter, dayShort } from "../lib/dates";
 import { dur, signed, signOf } from "../lib/fmt";
+import { useStore, useTz } from "../lib/store";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -42,7 +43,7 @@ export function balanceWords(min: number): string {
   return tr(s > 0 ? "common.balanceAriaAhead" : s < 0 ? "common.balanceAriaBehind" : "common.balanceAriaEven", { amount });
 }
 
-/** Taille et espacement via `className` (ex. "gap-[5px] text-[74px]"). */
+/** Size and spacing through `className` (e.g. "gap-[5px] text-[74px]"). */
 export function Ransom({ min, className }: { min: number; className?: string }) {
   const s = signOf(min);
   const sign = s > 0 ? "+" : s < 0 ? "−" : "±";
@@ -170,27 +171,30 @@ export function BalanceStamp({ min, dayDelta, size = 26, className }: { min: num
   );
 }
 
-export function halfLabel(mark: DayMark): string {
-  // `note` holds the stored half-day marker ("matin" / "apres-midi"): data values, not UI text.
+export function halfLabel(mark: Pick<DayMark, "portion" | "half">): string {
   if (mark.portion >= 1) return tr("common.halfFull");
-  if (mark.note === "matin") return tr("common.halfMorning");
-  if (mark.note === "apres-midi") return tr("common.halfAfternoon");
+  if (mark.half === "am") return tr("common.halfMorning");
+  if (mark.half === "pm") return tr("common.halfAfternoon");
   return tr("common.halfDay");
 }
 
 const MARK_TEXT = {
-  conge: "common.markLeave",
-  maladie: "common.markSick",
-  ferie: "common.markHoliday",
-  rtt: "common.markCompTime",
-  travail: "common.markWorked",
-} as const satisfies Record<DayMark["type"], string>;
-const MARK_STYLE: Record<DayMark["type"], string> = {
-  conge: "bg-blue text-white",
-  maladie: "shadow-[inset_0_0_0_2px_var(--color-blue)] text-paper",
-  ferie: "bg-yellow text-onpaper",
-  rtt: "bg-pink text-onpaper",
-  travail: "bg-ink shadow-[inset_0_0_0_2px_var(--color-yellow)] text-yellow",
+  leave: "common.markLeave",
+  sick: "common.markSick",
+  holiday: "common.markHoliday",
+  comp_time: "common.markCompTime",
+  workday: "common.markWorkday",
+} as const satisfies Record<MarkType, string>;
+
+/** Localized name of a day mark type ("leave", "sick"…). */
+export const markTypeLabel = (type: MarkType): string => tr(MARK_TEXT[type]);
+
+const MARK_STYLE: Record<MarkType, string> = {
+  leave: "bg-blue text-white",
+  sick: "shadow-[inset_0_0_0_2px_var(--color-blue)] text-paper",
+  holiday: "bg-yellow text-onpaper",
+  comp_time: "bg-pink text-onpaper",
+  workday: "bg-ink shadow-[inset_0_0_0_2px_var(--color-yellow)] text-yellow",
 };
 
 /** Short day-type text ("leave · morning", "holiday · 11 November"). */
@@ -198,7 +202,7 @@ export function dayTypeText(day: Pick<DayResult, "mark" | "holiday">): string | 
   const { mark, holiday } = day;
   if (mark) {
     const base = tr(MARK_TEXT[mark.type]);
-    if (mark.type === "travail") return holiday ? `${base} · ${holiday}` : base;
+    if (mark.type === "workday") return holiday ? `${base} · ${holiday}` : base;
     return mark.portion < 1 ? `${base} · ${halfLabel(mark)}` : base;
   }
   return holiday ? tr("common.holidayNamed", { name: holiday }) : null;
@@ -208,7 +212,7 @@ export function dayTypeText(day: Pick<DayResult, "mark" | "holiday">): string | 
 export function DayTypeBadge({ day, className }: { day: Pick<DayResult, "mark" | "holiday">; className?: string }) {
   const text = dayTypeText(day);
   if (!text) return null;
-  const style = day.mark ? MARK_STYLE[day.mark.type] : MARK_STYLE.ferie;
+  const style = day.mark ? MARK_STYLE[day.mark.type] : MARK_STYLE.holiday;
   return <span className={cx("inline-block px-2 py-0.5 font-label uppercase", style, className)}>{text}</span>;
 }
 
@@ -227,11 +231,14 @@ export function DayRibbon({
   endForDayAt: number | null;
   compact?: boolean;
 }) {
-  const nowMin = minutesOfDay(now);
+  const tz = useTz();
+  const clock = (ts: number) => formatClock(ts, tz);
+  const minOf = (ts: number) => minutesOfDay(ts, tz);
+  const nowMin = minOf(now);
   const isToday = day?.isToday ?? true;
-  const endMin = endForDayAt && endForDayAt > now ? minutesOfDay(endForDayAt) : null;
-  const mins = (day?.intervals ?? []).flatMap((i) => [minutesOfDay(i.start), minutesOfDay(i.end)]);
-  if (day?.danglingPunch) mins.push(minutesOfDay(day.danglingPunch.ts));
+  const endMin = endForDayAt && endForDayAt > now ? minOf(endForDayAt) : null;
+  const mins = (day?.intervals ?? []).flatMap((i) => [minOf(i.start), minOf(i.end)]);
+  if (day?.danglingPunch) mins.push(minOf(day.danglingPunch.ts));
   if (isToday) mins.push(nowMin);
   if (endMin !== null) mins.push(endMin);
   const startH = Math.min(7, ...mins.map((m) => Math.floor(m / 60)));
@@ -239,19 +246,19 @@ export function DayRibbon({
   const span = (endH - startH) * 60;
   const pct = (m: number) => ((m - startH * 60) / span) * 100;
 
-  const intervals = (day?.intervals ?? []).map((it) => ({ ...it, a: minutesOfDay(it.start), b: minutesOfDay(it.end) }));
+  const intervals = (day?.intervals ?? []).map((it) => ({ ...it, a: minOf(it.start), b: minOf(it.end) }));
   const pauses = intervals.slice(1).map((it, i) => ({ a: intervals[i].b, b: it.a }));
   const longest = pauses.reduce<{ a: number; b: number } | null>((best, p) => (!best || p.b - p.a > best.b - best.a ? p : best), null);
 
   // Tick marks: period bounds, now, planned exit, axis bounds; overlapping ticks are dropped.
   const ticks: Tick[] = [];
-  if (isToday) ticks.push({ at: nowMin, label: formatClock(now), prio: 0, now: true });
+  if (isToday) ticks.push({ at: nowMin, label: clock(now), prio: 0, now: true });
   intervals.forEach((it) => {
-    ticks.push({ at: it.a, label: formatClock(it.start), prio: 1 });
-    if (!it.open) ticks.push({ at: it.b, label: formatClock(it.end), prio: 1 });
+    ticks.push({ at: it.a, label: clock(it.start), prio: 1 });
+    if (!it.open) ticks.push({ at: it.b, label: clock(it.end), prio: 1 });
   });
-  if (day?.danglingPunch) ticks.push({ at: minutesOfDay(day.danglingPunch.ts), label: formatClock(day.danglingPunch.ts), prio: 1 });
-  if (endMin !== null && endForDayAt) ticks.push({ at: endMin, label: formatClock(endForDayAt), prio: 2 });
+  if (day?.danglingPunch) ticks.push({ at: minOf(day.danglingPunch.ts), label: clock(day.danglingPunch.ts), prio: 1 });
+  if (endMin !== null && endForDayAt) ticks.push({ at: endMin, label: clock(endForDayAt), prio: 2 });
   if (!compact) {
     ticks.push({ at: startH * 60, label: `${String(startH).padStart(2, "0")}:00`, prio: 3 });
     ticks.push({ at: endH * 60, label: `${String(endH).padStart(2, "0")}:00`, prio: 3 });
@@ -269,11 +276,11 @@ export function DayRibbon({
   return (
     <div>
       <div className="relative" style={{ height: H }}>
-        <div className="absolute inset-x-0 border-t-2 border-dotted border-[oklch(0.5_0_0)]" style={{ top: H / 2 - 1 }} />
+        <div className="absolute inset-x-0 border-t-2 border-dotted border-grey" style={{ top: H / 2 - 1 }} />
         {intervals.map((it, i) => (
           <div
             key={i}
-            title={`${formatClock(it.start)} → ${it.open ? tr("common.inProgress") : formatClock(it.end)} · ${dur(it.minutes)}`}
+            title={`${clock(it.start)} → ${it.open ? tr("common.inProgress") : clock(it.end)} · ${dur(it.minutes)}`}
             className={it.open ? "absolute bg-yellow" : "absolute bg-paper"}
             style={{
               left: `${pct(it.a)}%`,
@@ -286,7 +293,7 @@ export function DayRibbon({
         ))}
         {endMin !== null && (
           <div
-            title={tr("common.ribbonFullDayAt", { time: formatClock(endForDayAt!) })}
+            title={tr("common.ribbonFullDayAt", { time: clock(endForDayAt!) })}
             className="absolute box-border border-2 border-dashed border-yellow"
             style={{ left: `${pct(nowMin)}%`, width: `${pct(endMin) - pct(nowMin)}%`, top: barTop, height: barH }}
           />
@@ -295,7 +302,7 @@ export function DayRibbon({
           <div
             title={tr("common.ribbonMissingExit")}
             className="absolute w-1 bg-pink"
-            style={{ left: `${pct(minutesOfDay(day.danglingPunch.ts))}%`, top: barTop, height: barH }}
+            style={{ left: `${pct(minOf(day.danglingPunch.ts))}%`, top: barTop, height: barH }}
           />
         )}
         {!compact && longest && pct(longest.b) - pct(longest.a) >= 9 && (
@@ -353,17 +360,21 @@ export function WeekStrip({
   selected?: string;
   onPick?: (date: string) => void;
 }) {
+  const { workdays } = useStore().settings;
+  const isRest = (i: number) => !workdays.includes(i + 1);
+  // Compact: rest days get narrower columns.
+  const columns = compact ? week.map((_, i) => (isRest(i) ? ".6fr" : "1fr")).join(" ") : undefined;
   return (
     <div
-      className={cx(
-        "grid",
-        compact ? "grid-cols-[repeat(5,1fr)_.6fr_.6fr] gap-1 text-xs leading-[1.35]" : "grid-cols-7 gap-1.5 text-[15px] leading-[1.4]",
-      )}
+      className={cx("grid", compact ? "gap-1 text-xs leading-[1.35]" : "grid-cols-7 gap-1.5 text-[15px] leading-[1.4]")}
+      style={columns ? { gridTemplateColumns: columns } : undefined}
     >
       {week.map((d, i) => {
         const name = compact ? dayLetter(i + 1) : dayShort(i + 1).toUpperCase();
-        const weekend = i >= 5;
-        const quiet = !d || d.isFuture || (weekend && d.workedMin === 0);
+        const rest = isRest(i);
+        const quiet = !d || d.isFuture || (rest && d.workedMin === 0);
+        // Days before the balance start date are shown without a delta.
+        const delta = (x: DayResult) => (x.inBalance && (x.targetMin > 0 || x.workedMin > 0) ? signed(x.deltaMin) : null);
         const type = d ? dayTypeText(d) : null;
         const pick = onPick && d && !d.isFuture ? () => onPick(d.date) : undefined;
         // A function, not a component: the dashboard re-renders every second and the cells must not be remounted.
@@ -388,14 +399,14 @@ export function WeekStrip({
               {!compact && (
                 <>
                   <br />
-                  {d.present ? tr("common.inProgress") : d.targetMin > 0 || d.workedMin > 0 ? signed(d.deltaMin) : type ?? "—"}
+                  {d.present ? tr("common.inProgress") : (delta(d) ?? type ?? "—")}
                 </>
               )}
             </>,
           );
         if (quiet)
           return cell(
-            cx("text-grey", compact ? "p-[5px]" : "p-2", !weekend && "outline-2 -outline-offset-2 outline-dashed outline-grey/60"),
+            cx("text-grey", compact ? "p-[5px]" : "p-2", !rest && "outline-2 -outline-offset-2 outline-dashed outline-grey/60"),
             "hover:text-paper-muted hover:outline-paper-muted",
             <>
               {name}
@@ -414,7 +425,7 @@ export function WeekStrip({
               <>
                 <br />
                 <span className="text-paper-muted">
-                  {d.workedMin === 0 && type ? type.split(" · ")[0] : d.targetMin > 0 || d.workedMin > 0 ? signed(d.deltaMin) : "—"}
+                  {d.workedMin === 0 && type ? type.split(" · ")[0] : (delta(d) ?? "—")}
                 </span>
               </>
             )}
@@ -604,8 +615,11 @@ export function Checkbox({ checked, onChange, children }: { checked: boolean; on
   );
 }
 
-/** Provisional FR/EN switch; the account-level language setting will replace it. */
-export function LangSwitch({ className }: { className?: string }) {
+/**
+ * FR/EN switch. Without `onChange` it only changes (and remembers) the language on this device, as on the
+ * login screen; signed in, pass `onChange` to save the account setting.
+ */
+export function LangSwitch({ className, onChange }: { className?: string; onChange?: (l: Locale) => void }) {
   const t = useT();
   const { locale, setLocale } = useLocale();
   return (
@@ -615,7 +629,7 @@ export function LangSwitch({ className }: { className?: string }) {
           key={l}
           type="button"
           aria-pressed={l === locale}
-          onClick={() => setLocale(l)}
+          onClick={() => (onChange ? onChange(l) : setLocale(l))}
           className={cx(
             "min-h-8 cursor-pointer px-2",
             l === locale ? "-rotate-2 bg-yellow text-onpaper" : "text-paper-muted hover:text-paper",

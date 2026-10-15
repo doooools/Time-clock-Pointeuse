@@ -2,47 +2,93 @@
 import type { settings as fr } from "../fr/settings";
 
 export const settings: Record<keyof typeof fr, string> = {
+  // Rules
   rulesTitle: "HOUSE RULES",
-  targetLabel: "daily target (Mon → {end})",
-  endFri: "Fri",
-  endThu: "Thu",
+  targetLabel: "daily target",
   targetAria: "Daily target",
-  perWeekBefore: "that's",
+  perWeekBefore: "that is",
   perWeekAfter: "per week",
   formatError: "✕ Expected format: 7h18",
-  invalidTarget: "Invalid target (format 7h18)",
 
-  fridayLabel: "Friday is a workday",
-  yes: "yes",
-  no: "no",
-  fridayHelp:
-    "When off, Friday becomes a rest day: no target and no “no punch” alert, and a Friday with punches follows the weekend rule below.",
+  workdaysLabel: "working days",
+  workdaysHelp: "An unchecked day is a rest day: no target and no “no punch” warning.",
+  workdaysNone: "No working day: only punched days get a target, if the rule below is on.",
 
-  weekendLabel: "weekend rule",
+  restDayLabel: "punched rest day",
   on: "on",
   off: "off",
-  weekendHelpSatSun:
-    "A Saturday or Sunday on which you punch gets a target of {target}. When off, the target stays at 0 and all time worked on the weekend counts as extra.",
-  weekendHelpFriSun:
-    "A Friday, Saturday or Sunday on which you punch gets a target of {target}. When off, the target stays at 0 and all time worked on the weekend counts as extra.",
+  restDayHelp:
+    "On: a rest day on which you punch gets the {target} target. Off: its target stays at 0 and all the time worked that day counts as extra.",
 
-  thresholdLabel: "“duplicate punch?” threshold",
+  thresholdLabel: "“double punch?” threshold",
   thresholdAria: "Threshold in minutes",
-  thresholdHelp: "min: any shorter period gets flagged",
+  thresholdHelp: "min: a shorter period is flagged",
+
+  // Calendar
+  calendarTitle: "CALENDAR",
+  timezoneLabel: "time zone",
+  timezonePlaceholder: "search (e.g. America/New_York)",
+  timezoneHelp: "Days are cut and times are shown in this time zone.",
+  timezoneInvalid: "✕ Unknown time zone: pick one from the list",
+  timezoneUseBrowser: "use the browser's ({tz})",
+  timezoneMismatch: "⚠ Your browser is set to {tz}. Times are still shown in the time zone above.",
+  holidaysLabel: "public holidays",
+  holidaysNone: "none",
+  holidaysHelp: "Public holidays of the chosen region have a target of 0.",
+
+  // Balance
+  balanceTitle: "BALANCE",
+  balanceStartLabel: "balance start date",
+  balanceStartHelp: "Earlier days stay visible but do not count. Without a date, the balance starts at the first punch.",
+  balanceStartClear: "clear",
+  firstPunch: "first punch",
+  initialBalanceLabel: "carried-over balance",
+  initialBalanceAria: "Balance carried over at the start",
+  initialBalanceHelp: "Balance on the start date, e.g. taken from another tool (format −1h30 or +2h15).",
+  initialBalanceError: "✕ Expected format: −1h30 or +2h15",
+
+  // Instance defaults
+  defaultTag: "default",
+  resetToDefault: "↺ default: {value}",
+  resetAria: "Revert to the instance default: {value}",
 
   save: "save",
-  logout: "log out",
-  leaveReadOnly: "leave read-only mode",
+  saving: "saving…",
+  discard: "discard changes",
+  unsaved: "unsaved changes",
 
+  // Account
+  accountTitle: "THE ACCOUNT",
+  usernameLabel: "username",
+  displayNameLabel: "display name",
+  roleAdmin: "administrator",
+  passwordTitle: "change password",
+  currentPassword: "current password",
+  newPassword: "new password",
+  confirmPassword: "confirm new password",
+  passwordTooShort: "✕ At least 8 characters",
+  passwordMismatch: "✕ The two entries do not match",
+  passwordSubmit: "change password",
+  passwordChanged: "Password changed. Your other sessions have been signed out.",
+  languageHelp: "Language of the interface and of the messages sent back to your phone when you punch.",
+  logout: "sign out",
+
+  // Webhook
   chipTitle: "THE CHIP",
   webhookUrl: "WEBHOOK URL",
   secret: "SECRET",
   loadingToken: "loading…",
   copy: "copy",
   copied: "URL copied",
-  copyFailed: "Copy failed",
+  copyFailed: "Could not copy",
   show: "show",
   hide: "hide",
-  tokenHelp: "It lets you punch without a password. To change it:",
-  tutorialLink: "↓ set up your phone: the Tasker step-by-step guide",
+  tokenHelp:
+    "This URL is enough to punch, without a password. If it leaked, regenerate the token: the old URL stops working at once.",
+  regenerate: "regenerate token",
+  regenerateConfirm: "The old URL will stop working: you will have to replace it on your devices. Continue?",
+  regenerateYes: "yes, regenerate",
+  regenerateNo: "cancel",
+  regenerated: "New token created: update your devices",
+  tutorialLink: "↓ set up the phone: step-by-step guide",
 };

@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { computeDaysFromGroups, monthlySummaries, todayStatus, weeklySummaries, type DayResult } from "../../shared/compute";
+import { computeDaysFromGroups, monthlySummaries, todayStatus, weeklySummaries, workdaysPerWeek, type DayResult } from "../../shared/compute";
 import { addDays, dayKey, formatClock, isoWeek, monthKey, parseDayKey, weekStart, zonedToUtc } from "../../shared/time";
 import {
   ANOMALY_SHORT,
@@ -18,27 +18,25 @@ import {
   WeekStrip,
 } from "../components/Widgets";
 import { useT } from "../i18n";
-import { dayLabel, monthName } from "../lib/dates";
+import { dayLabel, frDate, monthName } from "../lib/dates";
 import { dur, durLive, signed, signOf } from "../lib/fmt";
 import { useIsDesktop } from "../lib/media";
 import { useNow, useStore } from "../lib/store";
 import { useOpenDay, useViewDay } from "../lib/viewDay";
 
-function FirstLaunch({ readOnly }: { readOnly: boolean }) {
+function FirstLaunch() {
   const t = useT();
   return (
     <div className="flex flex-col items-start gap-7 py-10 lg:flex-row lg:items-center lg:py-20">
       <div className="-rotate-[5deg] bg-yellow px-[22px] py-1.5 font-display text-[120px] leading-none text-onpaper">?</div>
       <div className="flex max-w-[440px] flex-col gap-3">
         <h1 className="font-display text-[30px] tracking-[.02em]">{t("dashboard.firstTitle")}</h1>
-        <p className="leading-[1.45] text-[oklch(0.82_0.01_90)]">
-          {readOnly ? t("dashboard.firstReadOnly") : t("dashboard.firstHint")}
-        </p>
-        <div className={cx("flex flex-wrap gap-3", readOnly && "hidden")}>
-          <Link to="/reglages" className="btn-primary px-3.5 py-2 text-[15px]">
+        <p className="leading-[1.45] text-paper-soft">{t("dashboard.firstHint")}</p>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/settings" className="btn-primary px-3.5 py-2 text-[15px]">
             {t("dashboard.configureWebhook")}
           </Link>
-          <Link to="/donnees" className="btn-secondary px-3.5 py-2 text-[15px]">
+          <Link to="/data" className="btn-secondary px-3.5 py-2 text-[15px]">
             {t("dashboard.importHistory")}
           </Link>
         </div>
@@ -69,7 +67,7 @@ function ExitCard({
       style={{ transform: `rotate(${rotate}deg)` }}
     >
       <div className="font-label text-[11px] text-paper-muted lg:text-sm">{title}</div>
-      <div className={cx("font-display text-4xl lg:text-[50px] lg:leading-tight", muted && "text-[oklch(0.6_0.01_90)]")}>{time}</div>
+      <div className={cx("font-display text-4xl lg:text-[50px] lg:leading-tight", muted && "text-paper-dim")}>{time}</div>
       {reached ? (
         <>
           <div className="font-label text-[13px] text-yellow lg:hidden">✓ {reached}</div>
@@ -89,11 +87,13 @@ function ExitCard({
 
 export default function Dashboard() {
   const t = useT();
-  const { byDay, marks, settings, punchNow, readOnly } = useStore();
+  const { byDay, marks, settings, punchNow } = useStore();
+  const tz = settings.timezone;
+  const clock = (ts: number) => formatClock(ts, tz);
   const now = useNow(1000);
   const desktop = useIsDesktop();
   const [busy, setBusy] = useState(false);
-  const realToday = dayKey(now);
+  const realToday = dayKey(now, tz);
   const [viewDay, setViewDay] = useViewDay(realToday);
   const openDay = useOpenDay();
   const past = viewDay !== null;
@@ -102,11 +102,11 @@ export default function Dashboard() {
   const days = useMemo(() => computeDaysFromGroups(byDay, marks, settings, now), [byDay, marks, settings, now]);
   const dayByDate = useMemo(() => new Map(days.map((d) => [d.date, d])), [days]);
 
-  if (days.length === 0) return <FirstLaunch readOnly={readOnly} />;
+  if (days.length === 0) return <FirstLaunch />;
 
   // Past day: state at 23:59:59 on that day (in the user's timezone).
-  const viewNow = viewDay ? (({ y, m, d }) => zonedToUtc(y, m, d, 23, 59, 59))(parseDayKey(viewDay)) : now;
-  const st = todayStatus(days, viewNow);
+  const viewNow = viewDay ? (({ y, m, d }) => zonedToUtc(tz, y, m, d, 23, 59, 59))(parseDayKey(viewDay)) : now;
+  const st = todayStatus(days, viewNow, settings);
   const today = st.date;
   const day = st.day;
   const dayDelta = st.workedMin - st.targetMin;
@@ -114,7 +114,7 @@ export default function Dashboard() {
   const monday = weekStart(today);
   const week: (DayResult | null)[] = Array.from({ length: 7 }, (_, i) => dayByDate.get(addDays(monday, i)) ?? null);
   const weekSum = weeklySummaries(days).find((w) => w.key === monday);
-  const weekTarget = Math.max(weekSum?.targetMin ?? 0, 5 * settings.dailyTargetMin);
+  const weekTarget = Math.max(weekSum?.targetMin ?? 0, workdaysPerWeek(settings) * settings.dailyTargetMin);
   const monthSum = monthlySummaries(days).find((m) => m.key === monthKey(today));
   const anomalies = days.filter((d) => d.anomalies.length > 0 && d.date >= addDays(realToday, -60)).reverse();
 
@@ -133,11 +133,11 @@ export default function Dashboard() {
   /* ── Status ── */
   const status = st.present ? (
     <span className="border-2 border-paper px-2 py-px lg:-rotate-1 lg:px-2.5 lg:py-[3px]">
-      {t("dashboard.statusPresent", { time: formatClock(st.openSince!) })}
+      {t("dashboard.statusPresent", { time: clock(st.openSince!) })}
     </span>
   ) : started ? (
     <span className="border-2 border-paper-dim px-2 py-px text-paper-muted lg:px-2.5 lg:py-[3px]">
-      {t(past ? "dashboard.statusLeft" : "dashboard.statusAway", { time: formatClock(lastPunch!.ts) })}
+      {t(past ? "dashboard.statusLeft" : "dashboard.statusAway", { time: clock(lastPunch!.ts) })}
     </span>
   ) : (
     <span className="border-2 border-dashed border-paper-dim px-2 py-px text-paper-muted lg:px-2.5 lg:py-[3px]">
@@ -146,22 +146,26 @@ export default function Dashboard() {
   );
 
   // Note next to the balance when a stamp would make no sense.
-  const heroNote = started
-    ? null
-    : st.targetMin === 0 && day?.holiday && !day.mark
-      ? t("dashboard.noteZeroTarget")
-      : past
-        ? null
-        : t("dashboard.noteLastEvening");
-  const isRtt = day?.mark?.type === "rtt";
+  // A day before the balance start date is shown, but does not move the balance.
+  const outOfBalance = day !== null && !day.inBalance;
+  const heroNote = outOfBalance
+    ? t("dashboard.noteBeforeStart", { date: frDate(settings.balanceStartDate ?? today) })
+    : started
+      ? null
+      : st.targetMin === 0 && day?.holiday && !day.mark
+        ? t("dashboard.noteZeroTarget")
+        : past
+          ? null
+          : t("dashboard.noteLastEvening");
+  const isCompTime = day?.mark?.type === "comp_time";
 
   /* ── Exit times ── */
   let fullDay: { time: string; muted?: boolean; sub: ReactNode; reached?: string };
   if (st.targetMin === 0) fullDay = { time: "—", sub: past ? t("dashboard.noTargetPast") : t("dashboard.noTargetToday") };
   else if (st.remainingMin <= 0) {
     const at = reachedAt(day, st.targetMin);
-    fullDay = { time: at ? formatClock(at) : "—", muted: true, sub: t("dashboard.targetReached"), reached: t("dashboard.stampReached") };
-  } else if (st.present && st.endForDayAt) fullDay = { time: formatClock(st.endForDayAt), sub: t("dashboard.inDur", { dur: dur(st.remainingMin) }) };
+    fullDay = { time: at ? clock(at) : "—", muted: true, sub: t("dashboard.targetReached"), reached: t("dashboard.stampReached") };
+  } else if (st.present && st.endForDayAt) fullDay = { time: clock(st.endForDayAt), sub: t("dashboard.inDur", { dur: dur(st.remainingMin) }) };
   else if (!started) fullDay = { time: "—", sub: past ? t("dashboard.noPunch") : t("dashboard.arrivalPlus", { dur: dur(st.targetMin) }) };
   else fullDay = { time: "—", sub: past ? t("dashboard.missedPast", { dur: dur(st.remainingMin) }) : t("dashboard.leftToDo", { dur: dur(st.remainingMin) }) };
 
@@ -169,12 +173,12 @@ export default function Dashboard() {
   const needToday = st.targetMin - st.balanceYesterdayMin; // time worked needed for a zero balance
   if (signOf(st.liveBalanceMin) >= 0) {
     const at = needToday > 0 ? reachedAt(day, needToday) : null;
-    zero = { time: at ? formatClock(at) : "—", muted: true, sub: at ? t("dashboard.zeroBack") : t("dashboard.zeroAlreadyPositive"), reached: t("dashboard.stampReachedZero") };
+    zero = { time: at ? clock(at) : "—", muted: true, sub: at ? t("dashboard.zeroBack") : t("dashboard.zeroAlreadyPositive"), reached: t("dashboard.stampReachedZero") };
   } else if (st.present && st.endForZeroAt) {
     zero =
-      dayKey(st.endForZeroAt) !== today
+      dayKey(st.endForZeroAt, tz) !== today
         ? { time: "—", sub: t("dashboard.notToday") }
-        : { time: formatClock(st.endForZeroAt), sub: t("dashboard.inDur", { dur: dur(-st.liveBalanceMin) }) };
+        : { time: clock(st.endForZeroAt), sub: t("dashboard.inDur", { dur: dur(-st.liveBalanceMin) }) };
   } else zero = { time: "—", sub: t(past ? "dashboard.missingPast" : "dashboard.missingNow", { dur: dur(-st.liveBalanceMin) }) };
 
   /* ── Worked ── */
@@ -213,7 +217,7 @@ export default function Dashboard() {
             )}
           >
             {dayLabel(today)}
-            {!past && ` · ${formatClock(now)}`} ▾
+            {!past && ` · ${clock(now)}`} ▾
           </DayPickerButton>
           {past && (
             <button className="min-h-9 min-w-9 cursor-pointer font-label text-sm text-paper-muted" aria-label={t("dashboard.backToToday")} onClick={() => setViewDay(null)}>
@@ -266,7 +270,7 @@ export default function Dashboard() {
             </button>
             <span>
               <span className="lg:hidden">{t("dashboard.dayShort")}</span>
-              <span className="hidden lg:inline">{isRtt && !started ? t("dashboard.dayDeltaComp") : t("dashboard.dayDelta")}</span>{" "}
+              <span className="hidden lg:inline">{isCompTime && !started ? t("dashboard.dayDeltaComp") : t("dashboard.dayDelta")}</span>{" "}
               <b>
                 <Delta min={dayDelta} after />
               </b>
@@ -323,7 +327,7 @@ export default function Dashboard() {
               {pauseMinutes(day) > 0 ? t("dashboard.ribbonPause", { dur: dur(pauseMinutes(day)) }) : ""}
             </span>
           </span>
-          {!past && !readOnly && <span className="hidden lg:inline">{punchButton}</span>}
+          {!past && <span className="hidden lg:inline">{punchButton}</span>}
         </div>
         <DayRibbon day={day} now={viewNow} endForDayAt={st.present ? st.endForDayAt : null} compact={!desktop} />
       </section>
@@ -368,14 +372,14 @@ export default function Dashboard() {
           {anomalies.length === 0 ? (
             <div className="flex items-center gap-4 py-2">
               <Stamp className="-rotate-[8deg] border-4 border-current px-3 py-1 text-2xl text-yellow">{t("dashboard.allClear")}</Stamp>
-              <span className="text-[15px] leading-normal text-[oklch(0.82_0.01_90)]">{t("dashboard.allPaired")}</span>
+              <span className="text-[15px] leading-normal text-paper-soft">{t("dashboard.allPaired")}</span>
             </div>
           ) : (
             <>
               {anomalies.slice(0, 5).map((d, i) => (
                 <Link
                   key={d.date}
-                  to={`/historique?mois=${monthKey(d.date)}&jour=${d.date}`}
+                  to={`/history?month=${monthKey(d.date)}&day=${d.date}`}
                   className={cx(
                     "flex min-h-11 items-center justify-between gap-2 px-3.5 py-2.5 text-[15px] text-onpaper lg:text-base",
                     i % 2 === 0 ? "rotate-[.7deg] bg-pink hover:bg-pink-hover" : "-rotate-[.7deg] bg-paper hover:bg-white",
@@ -389,7 +393,7 @@ export default function Dashboard() {
                 </Link>
               ))}
               {anomalies.length > 5 && (
-                <Link to="/historique?anomalies=1" className="font-label text-sm text-paper-muted hover:text-yellow">
+                <Link to="/history?anomalies=1" className="font-label text-sm text-paper-muted hover:text-yellow">
                   {t("dashboard.moreAnomalies", { count: anomalies.length - 5 })}
                 </Link>
               )}
@@ -399,7 +403,7 @@ export default function Dashboard() {
       </div>
 
       {/* Mobile backup */}
-      <div className={cx("pt-5 lg:hidden", (past || readOnly) && "hidden")}>
+      <div className={cx("pt-5 lg:hidden", past && "hidden")}>
         <button
           className="min-h-12 w-full cursor-pointer border-2 border-pink font-label text-base text-pink disabled:opacity-50"
           onClick={onPunch}

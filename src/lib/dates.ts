@@ -73,3 +73,13 @@ export function parseHm(value: string): number | null {
   const min = Number(m[2]);
   return h < 24 && min < 60 ? h * 60 + min : null;
 }
+
+/** Signed duration "−1h30", "+2h15", "-0h45", "1:30", "2h" → minutes (U+2212 minus accepted), or null. */
+export function parseSignedHm(value: string): number | null {
+  const m = /^([+\-−]?)\s*(\d{1,5})\s*(?:[h:]\s*(\d{2})?)$/.exec(value.trim());
+  if (!m) return null;
+  const min = m[3] === undefined ? 0 : Number(m[3]);
+  if (min >= 60) return null;
+  const total = Number(m[2]) * 60 + min;
+  return m[1] === "-" || m[1] === "−" ? -total : total;
+}

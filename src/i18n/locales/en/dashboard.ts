@@ -3,7 +3,6 @@ import type { dashboard as fr } from "../fr/dashboard";
 
 export const dashboard: Record<keyof typeof fr, string> = {
   firstTitle: "NOTHING TO PUNCH YET",
-  firstReadOnly: "No data has been recorded yet.",
   firstHint: "Set up the webhook on your phone, then tap it on the chip. Or import your history.",
   configureWebhook: "set up the webhook",
   importHistory: "import a history",
@@ -17,6 +16,7 @@ export const dashboard: Record<keyof typeof fr, string> = {
   statusNoPunch: "○ NO PUNCHES",
   statusNotYet: "○ NOT PUNCHED YET",
 
+  noteBeforeStart: "before the balance start ({date}): this day does not count",
   noteZeroTarget: "target 0h00: every minute punched counts as extra",
   noteLastEvening: "last evening's balance, the day hasn't started",
 

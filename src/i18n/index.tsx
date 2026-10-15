@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { fr } from "./locales/fr";
 import { en } from "./locales/en";
+import { LOCALES, type Locale } from "../../shared/settings";
 
-export type Locale = "fr" | "en";
-export const LOCALES: Locale[] = ["fr", "en"];
+export { LOCALES };
+export type { Locale };
 
 type Dict = typeof fr;
 type Ns = keyof Dict;
@@ -22,15 +23,22 @@ export function toLocale(tag: string | null | undefined): Locale {
   return tag && tag.toLowerCase().startsWith("fr") ? "fr" : "en";
 }
 
-/** Locale to use before the account language is known. */
-export function detectLocale(): Locale {
+const STORAGE_KEY = "opointeuse.locale";
+
+/** Language explicitly chosen on this device (login screen switch, or the last account language), if any. */
+export function savedLocale(): Locale | null {
   try {
-    const saved = localStorage.getItem("opointeuse.locale");
+    const saved = localStorage.getItem(STORAGE_KEY);
     if (saved === "fr" || saved === "en") return saved;
   } catch {
     /* storage unavailable */
   }
-  return toLocale(typeof navigator !== "undefined" ? navigator.language : "en");
+  return null;
+}
+
+/** Locale to use before the account language is known: saved choice, then the browser language. */
+export function detectLocale(): Locale {
+  return savedLocale() ?? toLocale(typeof navigator !== "undefined" ? navigator.language : "en");
 }
 
 /** Language tag for `Intl` APIs. */
@@ -68,7 +76,9 @@ export function tr(key: TKeyInput, vars?: TVars): string {
   return translate(currentLocale, key, vars);
 }
 
-type Ctx = { locale: Locale; setLocale: (l: Locale) => void; t: TFn };
+/** `persist: false` switches the language without remembering it on this device (e.g. instance default). */
+type SetLocale = (l: Locale, opts?: { persist?: boolean }) => void;
+type Ctx = { locale: Locale; setLocale: SetLocale; t: TFn };
 const I18nContext = createContext<Ctx | null>(null);
 
 /**
@@ -88,10 +98,11 @@ export function I18nProvider({ locale: controlled, children }: { locale?: Locale
     document.documentElement.lang = locale;
   }, [locale]);
 
-  const setLocale = useCallback((l: Locale) => {
+  const setLocale = useCallback<SetLocale>((l, opts) => {
     setLocaleState(l);
+    if (opts?.persist === false) return;
     try {
-      localStorage.setItem("opointeuse.locale", l);
+      localStorage.setItem(STORAGE_KEY, l);
     } catch {
       /* storage unavailable */
     }
@@ -115,7 +126,7 @@ export function useT(): TFn {
   return useI18n().t;
 }
 
-export function useLocale(): { locale: Locale; setLocale: (l: Locale) => void } {
+export function useLocale(): { locale: Locale; setLocale: SetLocale } {
   const { locale, setLocale } = useI18n();
   return { locale, setLocale };
 }

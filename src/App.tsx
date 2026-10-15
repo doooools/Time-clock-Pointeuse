@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { addDays, dayKey, formatClock, weekday } from "../shared/time";
+import { normalizeLocale } from "../shared/settings";
 import { cx, DayPickerButton, LangSwitch } from "./components/Widgets";
-import { useT, type TKey } from "./i18n";
-import { api } from "./lib/api";
+import { savedLocale, useLocale, useT, type TKey } from "./i18n";
+import { api, type User } from "./lib/api";
 import { longDate } from "./lib/dates";
-import { StoreProvider, useNow, useStore } from "./lib/store";
+import { StoreProvider, useNow, useStore, useTz } from "./lib/store";
 import { useViewDay } from "./lib/viewDay";
 import Dashboard from "./pages/Dashboard";
 import DataPage from "./pages/DataPage";
@@ -18,10 +19,10 @@ const Stats = lazy(() => import("./pages/Stats"));
 
 const NAV: { to: string; label: TKey; short?: TKey; glyph: string }[] = [
   { to: "/", label: "common.navToday", glyph: "±" },
-  { to: "/historique", label: "common.navHistory", glyph: "≡" },
+  { to: "/history", label: "common.navHistory", glyph: "≡" },
   { to: "/stats", label: "common.navStats", short: "common.navStatsShort", glyph: "▮▯" },
-  { to: "/donnees", label: "common.navData", glyph: "⇅" },
-  { to: "/reglages", label: "common.navSettings", glyph: "⚙" },
+  { to: "/data", label: "common.navData", glyph: "⇅" },
+  { to: "/settings", label: "common.navSettings", glyph: "⚙" },
 ];
 
 /** Loading skeleton: tilted grey boxes. */
@@ -29,10 +30,10 @@ export function Loading() {
   const t = useT();
   return (
     <div className="flex flex-col gap-[18px] py-10" aria-busy="true">
-      <div className="h-[26px] w-[220px] bg-[oklch(0.22_0_0)]" />
+      <div className="h-[26px] w-[220px] bg-coal" />
       <div className="flex flex-wrap items-end gap-2.5">
         {[-4, 2, -2, 3].map((r, i) => (
-          <div key={i} className="h-24 w-[70px] bg-[oklch(0.21_0_0)]" style={{ transform: `rotate(${r}deg)` }} />
+          <div key={i} className="h-24 w-[70px] bg-coal" style={{ transform: `rotate(${r}deg)` }} />
         ))}
         <span className="ml-[18px] font-label text-lg text-paper-muted">{t("common.loadingTagline")}</span>
       </div>
@@ -45,7 +46,8 @@ export function Loading() {
 function HeaderDate() {
   const t = useT();
   const now = useNow(1000);
-  const today = dayKey(now);
+  const tz = useTz();
+  const today = dayKey(now, tz);
   const [day, setDay] = useViewDay(today);
   const shown = day ?? today;
   const arrow = "min-h-8 cursor-pointer px-1.5 text-paper-muted hover:text-yellow disabled:cursor-default disabled:text-grey";
@@ -65,7 +67,7 @@ function HeaderDate() {
         )}
       >
         {longDate(shown, weekday(shown))}
-        {!day && ` — ${formatClock(now)}`} ▾
+        {!day && ` — ${formatClock(now, tz)}`} ▾
       </DayPickerButton>
       <button className={arrow} aria-label={t("common.nextDay")} disabled={!day} onClick={() => setDay(addDays(shown, 1))}>
         ›
@@ -79,14 +81,28 @@ function HeaderDate() {
   );
 }
 
+/** Signed-in account at the top right: name (to the settings) and sign-out. */
+function AccountMenu() {
+  const t = useT();
+  const { user, logout, saveSettings } = useStore();
+  return (
+    <div className="flex items-center gap-4 font-label text-sm">
+      <LangSwitch onChange={(locale) => saveSettings({ locale }, { quiet: true }).catch(() => {})} />
+      <NavLink to="/settings" className="max-w-[200px] truncate text-paper-muted hover:text-yellow" title={t("common.accountSettings")}>
+        {user.displayName || user.username}
+      </NavLink>
+      <button type="button" className="min-h-8 cursor-pointer text-paper-muted hover:text-red-text" onClick={() => logout()}>
+        {t("common.logout")}
+      </button>
+    </div>
+  );
+}
+
 function Shell() {
   const t = useT();
-  const { loading, readOnly } = useStore();
+  const { loading } = useStore();
   return (
     <div className="min-h-dvh">
-      {readOnly && (
-        <div className="bg-yellow px-[18px] py-1 text-center font-label text-sm text-onpaper">{t("common.readOnlyBanner")}</div>
-      )}
       {/* Desktop header */}
       <header className="mx-auto hidden max-w-[1600px] items-center justify-between px-10 pt-[30px] lg:flex">
         <div className="flex items-center gap-7">
@@ -108,9 +124,9 @@ function Shell() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-8">
           <HeaderDate />
-          <LangSwitch />
+          <AccountMenu />
         </div>
       </header>
 
@@ -121,10 +137,10 @@ function Shell() {
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/historique" element={<History />} />
+              <Route path="/history" element={<History />} />
               <Route path="/stats" element={<Stats />} />
-              <Route path="/donnees" element={<DataPage />} />
-              <Route path="/reglages" element={<SettingsPage />} />
+              <Route path="/data" element={<DataPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Dashboard />} />
             </Routes>
           </Suspense>
@@ -154,38 +170,49 @@ function Shell() {
 }
 
 export default function App() {
-  const [auth, setAuth] = useState<boolean | null>(null);
-  const [readOnly, setReadOnly] = useState(false);
+  const { setLocale } = useLocale();
+  // undefined = checking the session, null = signed out.
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+
+  const checkSession = useCallback(
+    () =>
+      api
+        .me()
+        .then((r) => {
+          if (r.authenticated) {
+            // Switch to the account language right away, before /api/data.
+            const locale = normalizeLocale(r.locale);
+            if (locale) setLocale(locale);
+            setUser(r.user);
+          } else {
+            // Before sign-in: the language chosen on this device, else the instance default, else the browser.
+            const locale = normalizeLocale(r.defaultLocale);
+            if (!savedLocale() && locale) setLocale(locale, { persist: false });
+            setUser(null);
+          }
+        })
+        .catch(() => setUser(null)),
+    [setLocale],
+  );
 
   useEffect(() => {
-    api
-      .me()
-      .then((r) => {
-        setAuth(r.authenticated);
-        setReadOnly(r.readOnly);
-      })
-      .catch(() => setAuth(false));
-  }, []);
+    checkSession();
+  }, [checkSession]);
 
-  const onUnauthorized = useCallback(() => setAuth(false), []);
+  const onUnauthorized = useCallback(() => setUser(null), []);
 
-  if (auth === null)
+  if (user === undefined)
     return (
       <div className="px-[18px] lg:px-10">
         <Loading />
       </div>
     );
-  if (!auth)
+  if (!user)
     return (
-      <Login
-        onSuccess={(ro) => {
-          setReadOnly(ro);
-          setAuth(true);
-        }}
-      />
+      <Login onSuccess={checkSession} />
     );
   return (
-    <StoreProvider onUnauthorized={onUnauthorized} readOnly={readOnly}>
+    <StoreProvider key={user.id} user={user} onUnauthorized={onUnauthorized}>
       <Shell />
     </StoreProvider>
   );

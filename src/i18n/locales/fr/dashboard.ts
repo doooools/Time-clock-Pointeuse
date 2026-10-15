@@ -1,7 +1,6 @@
 // Dashboard ("today") strings.
 export const dashboard = {
   firstTitle: "RIEN À POINTER POUR L'INSTANT",
-  firstReadOnly: "Aucune donnée n'a encore été enregistrée.",
   firstHint: "Configurez le webhook sur votre téléphone, puis passez-le devant la puce. Ou importez votre historique.",
   configureWebhook: "configurer le webhook",
   importHistory: "importer un historique",
@@ -15,6 +14,7 @@ export const dashboard = {
   statusNoPunch: "○ AUCUN POINTAGE",
   statusNotYet: "○ PAS ENCORE POINTÉ",
 
+  noteBeforeStart: "avant le départ du solde ({date}) : cette journée ne compte pas",
   noteZeroTarget: "objectif 0h00 : chaque minute pointée compte en plus",
   noteLastEvening: "solde d'hier soir, la journée n'a pas commencé",
 

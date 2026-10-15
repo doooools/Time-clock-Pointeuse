@@ -2,10 +2,10 @@
 import type { login as fr } from "../fr/login";
 
 export const login: Record<keyof typeof fr, string> = {
+  usernameLabel: "username",
   passwordLabel: "password",
-  wrongPassword: "✕ Wrong password. Try again.",
+  wrongCredentials: "✕ Wrong username or password.",
   stampRefused: "denied",
   submit: "enter →",
   checking: "checking…",
-  readOnly: "no password? browse read-only",
 };

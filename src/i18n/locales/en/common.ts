@@ -18,8 +18,9 @@ export const common: Record<keyof typeof fr, string> = {
   navStatsShort: "stats",
   navData: "data",
   navSettings: "settings",
+  accountSettings: "Account settings",
+  logout: "sign out",
 
-  readOnlyBanner: "READ-ONLY · browsing only, no changes possible",
   prevDay: "Previous day",
   nextDay: "Next day",
   pickDay: "Pick the day to show",
@@ -58,7 +59,7 @@ export const common: Record<keyof typeof fr, string> = {
   markSick: "sick",
   markHoliday: "holiday",
   markCompTime: "comp time",
-  markWorked: "worked day",
+  markWorkday: "worked day",
   holidayNamed: "holiday · {name}",
 
   ribbonFullDayAt: "Full day at {time}",

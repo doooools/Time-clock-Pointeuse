@@ -1,18 +1,19 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { dayKey } from "../../shared/time";
+import { dayKey, isValidDayKey } from "../../shared/time";
+import { useTz } from "./store";
 
-const dayPath = (d: string | null, today: string) => (!d || d >= today ? "/" : `/?jour=${d}`);
+const dayPath = (d: string | null, today: string) => (!d || d >= today ? "/" : `/?day=${d}`);
 
 /**
- * Day shown on the "Today" page (`/?jour=YYYY-MM-DD`); `null` = today, live.
+ * Day shown on the "Today" page (`/?day=YYYY-MM-DD`); `null` = today, live.
  * Picking a day from another tab brings you back to "Today".
  */
 export function useViewDay(today: string): [string | null, (day: string | null) => void] {
   const [params] = useSearchParams();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const raw = pathname === "/" ? params.get("jour") : null;
-  const day = raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) && raw < today ? raw : null;
+  const raw = pathname === "/" ? params.get("day") : null;
+  const day = raw && isValidDayKey(raw) && raw < today ? raw : null;
   const setDay = (d: string | null) => navigate(dayPath(d, today));
   return [day, setDay];
 }
@@ -20,8 +21,9 @@ export function useViewDay(today: string): [string | null, (day: string | null) 
 /** Opens a day on the "Today" page, like the header picker does (and scrolls to the top). */
 export function useOpenDay(): (day: string) => void {
   const navigate = useNavigate();
+  const tz = useTz();
   return (d) => {
-    navigate(dayPath(d, dayKey(Date.now())));
+    navigate(dayPath(d, dayKey(Date.now(), tz)));
     window.scrollTo({ top: 0 });
   };
 }

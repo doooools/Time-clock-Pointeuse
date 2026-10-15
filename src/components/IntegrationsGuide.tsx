@@ -202,7 +202,7 @@ function Troubles({ prefix, count }: { prefix: string; count: number }) {
             </span>
             {t(key(`${prefix}${n}_q`))}
           </summary>
-          <p className="px-4 pb-4 pl-10 leading-normal text-pretty text-[oklch(0.85_0.01_90)]">
+          <p className="px-4 pb-4 pl-10 leading-normal text-pretty text-paper-soft">
             <Rich text={t(key(`${prefix}${n}_a`))} />
           </p>
         </details>
@@ -236,7 +236,7 @@ function AndroidTab() {
   const t = useT();
   return (
     <>
-      <p className="max-w-[75ch] text-lg leading-normal text-pretty text-[oklch(0.85_0.01_90)]">
+      <p className="max-w-[75ch] text-lg leading-normal text-pretty text-paper-soft">
         <Rich text={t("integrations.android_intro")} />
       </p>
       <StepList defs={ANDROID_STEPS} />
@@ -252,7 +252,7 @@ function IosTab() {
   const t = useT();
   return (
     <>
-      <p className="max-w-[75ch] text-lg leading-normal text-pretty text-[oklch(0.85_0.01_90)]">
+      <p className="max-w-[75ch] text-lg leading-normal text-pretty text-paper-soft">
         <Rich text={t("integrations.ios_intro")} />
       </p>
       <StepList defs={IOS_STEPS} />
@@ -274,7 +274,7 @@ function HttpTab() {
   const sample = `{ "ok": true, "action": "in", "time": "08:12", "worked_today": "0h00",\n  "remaining_today": "7h00", "departure": "15:12", "balance": "+1h03",\n  "message": "..." }`;
   return (
     <>
-      <p className="max-w-[75ch] text-lg leading-normal text-pretty text-[oklch(0.85_0.01_90)]">
+      <p className="max-w-[75ch] text-lg leading-normal text-pretty text-paper-soft">
         <Rich text={t("integrations.http_intro")} />
       </p>
       <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
@@ -330,7 +330,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "http", label: "integrations.tab_http" },
 ];
 
-export default function TaskerGuide() {
+export default function IntegrationsGuide() {
   const t = useT();
   const [tab, setTab] = useState<Tab>("android");
   return (
@@ -339,7 +339,7 @@ export default function TaskerGuide() {
         <h2 id="tuto" className="-rotate-1 self-start bg-yellow px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
           {t("integrations.guide_title")}
         </h2>
-        <p className="max-w-[75ch] text-lg leading-normal text-pretty text-[oklch(0.85_0.01_90)]">
+        <p className="max-w-[75ch] text-lg leading-normal text-pretty text-paper-soft">
           {t("integrations.guide_intro", { example: t("integrations.guide_example") })}
         </p>
         <p className="max-w-[75ch] text-[15px] text-pretty text-paper-muted">{t("integrations.docs_hint")}</p>

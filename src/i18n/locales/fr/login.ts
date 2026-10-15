@@ -1,9 +1,9 @@
 // Login page strings.
 export const login = {
+  usernameLabel: "identifiant",
   passwordLabel: "mot de passe",
-  wrongPassword: "✕ Mot de passe incorrect. Réessayez.",
+  wrongCredentials: "✕ Identifiant ou mot de passe incorrect.",
   stampRefused: "refusé",
   submit: "entrer →",
   checking: "vérification…",
-  readOnly: "pas de mot de passe ? consulter en lecture seule",
 } as const satisfies Record<string, string>;
