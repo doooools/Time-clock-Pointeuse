@@ -77,5 +77,6 @@ export const team = {
   privacyTitle: "Confidentialité",
   privacyAdmins: "Les superadmins et admins voient les heures et la présence de toute l'équipe, et les modifications sont consignées dans le journal.",
   privacyUsers: "Les utilisateurs ne voient que leurs propres heures, sauf droit contraire : « voit qui est là » et « consulte les heures de ses collègues » sont accordés compte par compte.",
+  openJournal: "Voir le journal des modifications",
   privacyJournal: "Toute correction faite par un tiers sur vos heures est consignée dans le journal et vous est notifiée.",
 } as const satisfies Record<string, string>;

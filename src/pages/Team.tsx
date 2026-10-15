@@ -14,7 +14,7 @@ import {
   type UserPatch,
 } from "../lib/api";
 import { useMe } from "../lib/me";
-import { useTz } from "../lib/store";
+import { teamPath, useTz } from "../lib/store";
 import { useToast } from "../lib/toast";
 
 /** One line of the member list, whether it comes from `/api/team` or from the admin list. */
@@ -610,7 +610,7 @@ export default function Team() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {caps.viewTeam && !isMe && !r.disabled && (
-                      <Link to={`/team/${r.id}`} className="btn-secondary px-3 py-1.5 text-[15px]">
+                      <Link to={teamPath(r.id)} className="btn-secondary px-3 py-1.5 text-[15px]">
                         {t("team.viewHours")}
                       </Link>
                     )}
@@ -647,6 +647,9 @@ export default function Team() {
         <p>{t("team.privacyAdmins")}</p>
         <p>{t("team.privacyUsers")}</p>
         <p>{t("team.privacyJournal")}</p>
+        <Link to="/journal" className="underline hover:text-yellow">
+          {t("team.openJournal")}
+        </Link>
       </aside>
     </div>
   );

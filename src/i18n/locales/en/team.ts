@@ -75,5 +75,6 @@ export const team: Record<keyof typeof fr, string> = {
   privacyTitle: "Privacy",
   privacyAdmins: "Superadmins and admins see the hours and presence of the whole team, and their edits are recorded in the change log.",
   privacyUsers: "Users only see their own hours unless granted otherwise: “sees who is in” and “views colleagues' hours” are granted per account.",
+  openJournal: "Open the change log",
   privacyJournal: "Any correction a third party makes to your hours is recorded in the change log and you are notified.",
 };

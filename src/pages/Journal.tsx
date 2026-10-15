@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { cx } from "../components/Widgets";
 import { intlTag, useLocale, useT } from "../i18n";
 import { api, userLabel, type AuditEntryView, type TeamMember } from "../lib/api";
 import { describeChange } from "../lib/audit";
 import { useMe } from "../lib/me";
-import { useTz } from "../lib/store";
+import { teamPath, useTz } from "../lib/store";
 
 const PAGE_SIZE = 50;
 /** Filter value: my own data (default), or everyone I may see. */
@@ -17,7 +17,9 @@ export default function Journal() {
   const me = useMe();
   const tz = useTz();
   const canPickMember = me.capabilities.viewTeam;
-  const [filter, setFilter] = useState<Filter>("mine");
+  const [params] = useSearchParams();
+  const initialId = Number(params.get("userId"));
+  const [filter, setFilter] = useState<Filter>(canPickMember && Number.isInteger(initialId) && initialId > 0 && initialId !== me.id ? initialId : "mine");
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [entries, setEntries] = useState<AuditEntryView[] | null>(null);
   const [next, setNext] = useState<number | null>(null);
@@ -66,8 +68,8 @@ export default function Journal() {
   );
 
   const dayLink = (entry: AuditEntryView, date: string): string => {
-    const base = entry.subject.id === me.id ? "" : `/team/${entry.subject.id}`;
-    return `${base}/history?month=${date.slice(0, 7)}&day=${date}`;
+    const to = `/history?month=${date.slice(0, 7)}&day=${date}`;
+    return entry.subject.id === me.id ? to : teamPath(entry.subject.id, to);
   };
 
   return (
