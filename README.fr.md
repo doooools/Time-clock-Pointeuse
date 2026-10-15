@@ -13,6 +13,8 @@ l'application web affiche votre solde d'heures en temps réel.** Elle est pensé
 ![Aujourd'hui : solde en direct et temps travaillé](docs/images/today.png)
 ![Historique : pointages modifiables](docs/images/history.png)
 ![Stats : semaines, mois et carte de chaleur](docs/images/stats.png)
+![Équipe : qui est là, membres, rôles](docs/images/team.png)
+![Fenêtre de notification : un collègue a corrigé vos heures](docs/images/notifications.png)
 <img src="docs/images/today-mobile.png" alt="Aujourd'hui sur téléphone" width="240">
 
 ## Fonctionnalités

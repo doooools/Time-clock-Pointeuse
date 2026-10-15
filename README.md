@@ -13,6 +13,8 @@ in Docker.
 ![Today: live balance and worked time](docs/images/today.png)
 ![History: editable punches](docs/images/history.png)
 ![Stats: weeks, months and heat map](docs/images/stats.png)
+![Team: who is in, members, roles](docs/images/team.png)
+![Notification window: a colleague corrected your hours](docs/images/notifications.png)
 <img src="docs/images/today-mobile.png" alt="Today on a phone" width="240">
 
 ## Features
