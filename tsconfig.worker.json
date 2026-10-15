@@ -13,5 +13,15 @@
     "noUnusedParameters": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["server", "shared"]
+  "include": ["server", "shared"],
+  // Node-only files (T3) are type-checked by tsconfig.node.json with the `node` types.
+  "exclude": [
+    "server/db/sqlite.ts",
+    "server/db/sqlite.test.ts",
+    "server/entry/node.ts",
+    "server/entry/node.test.ts",
+    "server/migrate.ts",
+    "server/migrate.test.ts",
+    "server/node/**"
+  ]
 }

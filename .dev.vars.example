@@ -1,0 +1,12 @@
+# Local secrets for `npm run dev` / `wrangler dev`. Copy to .dev.vars (git-ignored).
+# In production: `npx wrangler secret put SESSION_SECRET`.
+
+# Signs session cookies. Required, at least 32 characters. Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+SESSION_SECRET=change-me-to-a-random-string-of-at-least-32-characters
+
+# Optional instance defaults, applied to every account that has not set its own value.
+# DEFAULT_LOCALE=en                 # en | fr
+# DEFAULT_TIMEZONE=UTC              # IANA time zone, e.g. Europe/Paris
+# DEFAULT_HOLIDAYS=none             # holiday region code (e.g. FR), or none
+# DEFAULT_DAILY_TARGET_MIN=420      # daily target in minutes (420 = 7h00)

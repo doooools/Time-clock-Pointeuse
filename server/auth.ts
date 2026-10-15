@@ -1,60 +1,35 @@
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import type { AppEnv, Env, Role } from "./env";
+import type { AppEnv, UserRow } from "./env";
+import { fail, readBody } from "./http";
+import { hashPassword, verifyPassword } from "./passwords";
+import { SESSION_COOKIE, SESSION_DAYS, SESSION_MS, signSession, verifySession } from "./session";
+import { getUserById, getUserByUsername, instanceDefaults, publicUser, resolveUserSettings } from "./users";
+import { resolveSettings } from "../shared/settings";
 
-const COOKIE = "pointeuse_session";
-const SESSION_DAYS = 90;
-const enc = new TextEncoder();
+/** Slows down password guessing on failed logins. */
+const LOGIN_FAILURE_DELAY_MS = 800;
 
-async function hmac(secret: string, data: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
-    "sign",
-  ]);
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
-  return btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+/** Hash checked when the username does not exist, so both failure paths cost the same. */
+let dummyHash: Promise<string> | undefined;
+
+/** Loads the user behind the session cookie, or null (bad signature, expired, disabled, revoked). */
+export async function sessionUser(c: Context<AppEnv>): Promise<UserRow | null> {
+  const payload = await verifySession(c.env.SESSION_SECRET, getCookie(c, SESSION_COOKIE));
+  if (!payload) return null;
+  const user = await getUserById(c.env.DB, payload.userId);
+  if (!user || user.disabled_at !== null || user.session_version !== payload.sessionVersion) return null;
+  return user;
 }
 
-/** Comparaison à temps constant (via HMAC des deux côtés). */
-export async function safeEqual(a: string, b: string, secret: string): Promise<boolean> {
-  const [ha, hb] = await Promise.all([hmac(secret, a), hmac(secret, b)]);
-  let diff = ha.length ^ hb.length;
-  for (let i = 0; i < Math.min(ha.length, hb.length); i++) diff |= ha.charCodeAt(i) ^ hb.charCodeAt(i);
-  return diff === 0;
-}
-
-// Le rôle est signé dans le cookie : un lecteur ne peut pas se promouvoir.
-const PAYLOAD: Record<Role, string> = { full: "session", readonly: "readonly" };
-
-async function makeSession(env: Env, role: Role): Promise<string> {
-  const exp = Date.now() + SESSION_DAYS * 86_400_000;
-  return `${exp}.${await hmac(env.SESSION_SECRET, `${PAYLOAD[role]}:${exp}`)}`;
-}
-
-async function getRole(env: Env, value: string | undefined): Promise<Role | null> {
-  if (!value) return null;
-  const [exp, sig] = value.split(".");
-  if (!exp || !sig || Number(exp) < Date.now()) return null;
-  for (const role of ["full", "readonly"] as const) {
-    if (await safeEqual(sig, await hmac(env.SESSION_SECRET, `${PAYLOAD[role]}:${exp}`), env.SESSION_SECRET)) return role;
-  }
-  return null;
-}
-
-const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
-
-export const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const role = await getRole(c.env, getCookie(c, COOKIE));
-  if (!role) return c.json({ error: "unauthorized" }, 401);
-  if (role === "readonly" && !SAFE_METHODS.includes(c.req.method)) return c.json({ error: "Lecture seule" }, 403);
-  c.set("role", role);
-  await next();
-};
-
-function startSession(c: Context<AppEnv>, value: string) {
-  setCookie(c, COOKIE, value, {
+/** Sets the session cookie for this user and session version. */
+export async function issueSession(c: Context<AppEnv>, user: Pick<UserRow, "id" | "session_version">) {
+  const token = await signSession(c.env.SESSION_SECRET, {
+    userId: user.id,
+    sessionVersion: user.session_version,
+    exp: Date.now() + SESSION_MS,
+  });
+  setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: new URL(c.req.url).protocol === "https:",
     sameSite: "Lax",
@@ -63,27 +38,47 @@ function startSession(c: Context<AppEnv>, value: string) {
   });
 }
 
+/** Requires a valid session; sets `user` and switches `locale` to the user's language. */
+export const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const user = await sessionUser(c);
+  if (!user) return fail(c, 401, "unauthorized");
+  c.set("user", user);
+  c.set("locale", resolveUserSettings(c.env, user).locale);
+  await next();
+};
+
+/** Must run after `requireSession`. */
+export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
+  if (c.get("user").role !== "admin") return fail(c, 403, "forbidden");
+  await next();
+};
+
 export const authRoutes = new Hono<AppEnv>()
-  .post("/login", async (c) => {
-    const body = await c.req.json<{ password?: string }>().catch(() => ({ password: undefined }));
-    const ok = await safeEqual(body.password ?? "", c.env.APP_PASSWORD, c.env.SESSION_SECRET);
-    if (!ok) {
-      await new Promise((r) => setTimeout(r, 800)); // freine le brute-force
-      return c.json({ error: "Mot de passe incorrect" }, 401);
+  .get("/me", async (c) => {
+    const user = await sessionUser(c);
+    if (!user) {
+      return c.json({ authenticated: false, defaultLocale: resolveSettings(instanceDefaults(c.env)).locale });
     }
-    startSession(c, await makeSession(c.env, "full"));
-    return c.json({ ok: true });
+    const { locale } = resolveUserSettings(c.env, user);
+    return c.json({ authenticated: true, user: publicUser(user), locale });
   })
-  // Accès sans mot de passe : tout est visible, rien n'est modifiable.
-  .post("/login-readonly", async (c) => {
-    startSession(c, await makeSession(c.env, "readonly"));
+  .post("/login", async (c) => {
+    const body = await readBody(c);
+    const username = typeof body.username === "string" ? body.username.trim() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const user = username ? await getUserByUsername(c.env.DB, username) : null;
+    // Always run one PBKDF2 verification so timing does not reveal whether the username exists.
+    const ok = user
+      ? await verifyPassword(password, user.password_hash)
+      : await verifyPassword(password, await (dummyHash ??= hashPassword("not-a-real-password"))).then(() => false);
+    if (!ok || !user || user.disabled_at !== null) {
+      await new Promise((r) => setTimeout(r, LOGIN_FAILURE_DELAY_MS));
+      return fail(c, 401, "invalidCredentials");
+    }
+    await issueSession(c, user);
     return c.json({ ok: true });
   })
   .post("/logout", (c) => {
-    deleteCookie(c, COOKIE, { path: "/" });
+    deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return c.json({ ok: true });
-  })
-  .get("/me", async (c) => {
-    const role = await getRole(c.env, getCookie(c, COOKIE));
-    return c.json({ authenticated: role !== null, readOnly: role === "readonly" });
   });
