@@ -44,4 +44,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Dev-dependency advisories (wrangler/miniflare, undici, sharp, source-map-js) fixed by non-breaking updates;
   `npm audit` reports 0 vulnerabilities.
 
-[0.1.0]: https://github.com/<owner>/opointeuse/releases/tag/v0.1.0
+[0.1.0]: https://github.com/doooools/Time-clock-Pointeuse/releases/tag/v0.1.0

@@ -96,14 +96,14 @@ function ExportSection() {
             <button
               className="btn-primary flex-1 p-3 text-[17px]"
               disabled={!selection.days.length}
-              onClick={() => exportXlsx(selection.days, t("data.workbook_title", { title: selection.title }), `opointeuse-${selection.slug}.xlsx`, locale, settings.timezone)}
+              onClick={() => exportXlsx(selection.days, t("data.workbook_title", { title: selection.title }), `${t("data.file_prefix")}-${selection.slug}.xlsx`, locale, settings.timezone)}
             >
               {t("data.download_xlsx")}
             </button>
             <button
               className="btn-secondary flex-1 p-2.5 text-[17px]"
               disabled={!selection.days.length}
-              onClick={() => exportCsv(selection.days, `opointeuse-${selection.slug}.csv`, locale, settings.timezone)}
+              onClick={() => exportCsv(selection.days, `${t("data.file_prefix")}-${selection.slug}.csv`, locale, settings.timezone)}
             >
               {t("data.download_csv")}
             </button>

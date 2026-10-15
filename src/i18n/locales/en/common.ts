@@ -2,7 +2,8 @@
 import type { common as fr } from "../fr/common";
 
 export const common: Record<keyof typeof fr, string> = {
-  brand: "OPOINTEUSE",
+  brand: "TIME CLOCK",
+  app_title: "Time clock",
 
   // Empty states (new account)
   emptyTitle: "NOTHING TO PUNCH YET",

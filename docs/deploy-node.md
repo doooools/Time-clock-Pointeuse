@@ -8,7 +8,7 @@ file. No native dependency, no external database. Suitable for a laptop, a home 
 ## 1. Build
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 npm run build:node
 ```

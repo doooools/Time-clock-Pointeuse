@@ -320,7 +320,7 @@ function HttpTab() {
   const url = `${origin}/api/webhook/punch`;
   const curl = `curl -fsS -X POST -H "X-Webhook-Token: YOUR_TOKEN" ${url}`;
   const powershell = `$headers = @{ "X-Webhook-Token" = "YOUR_TOKEN" }\nInvoke-RestMethod -Method Post -Uri "${url}" -Headers $headers`;
-  const homeAssistant = `# secrets.yaml\nopointeuse_token: YOUR_TOKEN\n\n# configuration.yaml\nrest_command:\n  opointeuse_punch:\n    url: "${url}"\n    method: post\n    headers:\n      X-Webhook-Token: !secret opointeuse_token`;
+  const homeAssistant = `# secrets.yaml\npointeuse_token: YOUR_TOKEN\n\n# configuration.yaml\nrest_command:\n  pointeuse_punch:\n    url: "${url}"\n    method: post\n    headers:\n      X-Webhook-Token: !secret pointeuse_token`;
   const sample = `{ "ok": true, "action": "in", "time": "08:12", "worked_today": "0h00",\n  "remaining_today": "7h00", "departure": "15:12", "balance": "+1h03",\n  "message": "..." }`;
   return (
     <>

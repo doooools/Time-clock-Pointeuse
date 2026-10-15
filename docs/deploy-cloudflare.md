@@ -6,7 +6,7 @@ comfortably in Cloudflare's free tier for a person or a small team.
 **You need**: a free Cloudflare account, Node ≥ 22.13 and the repository cloned on your machine.
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 ```
 

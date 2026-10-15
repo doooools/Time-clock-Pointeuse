@@ -1,6 +1,6 @@
 # Opointeuse
 
-[![CI](https://github.com/<owner>/opointeuse/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/opointeuse/actions/workflows/ci.yml)
+[![CI](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml/badge.svg)](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml)
 [![Licence : Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
 
 *Read in English: [README.md](README.md)*
@@ -58,7 +58,7 @@ ou plus convient).
 Nécessite Node ≥ 22.13.
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 npm run build:node
 cp .env.example .env            # puis renseignez SESSION_SECRET dans .env
@@ -71,7 +71,7 @@ Suite : [docs/deploy-node.md](docs/deploy-node.md) (systemd, Caddy / nginx, sauv
 ### Docker
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
 docker compose up -d --build    # http://localhost:3000
 docker compose exec opointeuse node dist/server/cli.mjs add alice --generate-password
@@ -82,7 +82,7 @@ Suite : [docs/deploy-docker.md](docs/deploy-docker.md).
 ### Cloudflare Workers + D1
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 npx wrangler login
 npx wrangler d1 create opointeuse        # collez le database_id dans wrangler.jsonc
@@ -139,7 +139,7 @@ les autres agents via `AGENTS.md`) et un skill de mise en place guidée (`.claud
 Code d'« installer Opointeuse », il pose les quelques questions utiles (cible, équipe, fuseau, fériés, horaires),
 puis exécute les étapes en demandant confirmation avant toute action irréversible. Exemples de demandes :
 
-- « Voici le dépôt : `https://github.com/<owner>/opointeuse`. Déploie-le sur mon compte Cloudflare, crée-moi le
+- « Voici le dépôt : `https://github.com/doooools/Time-clock-Pointeuse`. Déploie-le sur mon compte Cloudflare, crée-moi le
   premier compte, fuseau Europe/Paris, jours fériés français. »
 - « Installe-le avec Docker sur mon serveur maison derrière Caddy, pour une équipe de 6 personnes, interface en
   français. »

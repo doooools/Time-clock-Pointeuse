@@ -61,18 +61,18 @@ Keep the script readable only by you (`chmod 600`): it contains the token.
 Store the token in `secrets.yaml`:
 
 ```yaml
-opointeuse_token: YOUR_TOKEN
+pointeuse_token: YOUR_TOKEN
 ```
 
 `configuration.yaml`:
 
 ```yaml
 rest_command:
-  opointeuse_punch:
+  pointeuse_punch:
     url: "https://pointeuse.example.com/api/webhook/punch"
     method: post
     headers:
-      X-Webhook-Token: !secret opointeuse_token
+      X-Webhook-Token: !secret pointeuse_token
     timeout: 15
 ```
 
@@ -82,7 +82,7 @@ Call it from an automation, a script or a dashboard button, and read the reply w
 script:
   punch:
     sequence:
-      - action: rest_command.opointeuse_punch
+      - action: rest_command.pointeuse_punch
         response_variable: punch
       - action: notify.notify
         data:

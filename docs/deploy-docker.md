@@ -8,7 +8,7 @@ a volume mounted at `/data`.
 ## 1. Configure
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
 ```
 

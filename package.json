@@ -6,9 +6,9 @@
   "description": "Self-hosted personal time clock: punch in/out via webhook, daily balance, leave and holidays. Runs on Cloudflare Workers + D1, Node or Docker.",
   "keywords": ["time-tracking", "time-clock", "timesheet", "cloudflare-workers", "d1", "hono", "self-hosted", "react"],
   "engines": { "node": ">=22.13" },
-  "repository": { "type": "git", "url": "git+https://github.com/<owner>/opointeuse.git" },
-  "homepage": "https://github.com/<owner>/opointeuse",
-  "bugs": { "url": "https://github.com/<owner>/opointeuse/issues" },
+  "repository": { "type": "git", "url": "git+https://github.com/doooools/Time-clock-Pointeuse.git" },
+  "homepage": "https://github.com/doooools/Time-clock-Pointeuse",
+  "bugs": { "url": "https://github.com/doooools/Time-clock-Pointeuse/issues" },
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,6 +1,6 @@
 # Opointeuse
 
-[![CI](https://github.com/<owner>/opointeuse/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/opointeuse/actions/workflows/ci.yml)
+[![CI](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml/badge.svg)](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 *Lire en français : [README.fr.md](README.fr.md)*
@@ -55,7 +55,7 @@ Generate a secret first: `openssl rand -hex 32` (any random string of 32+ charac
 Requires Node ≥ 22.13.
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 npm run build:node
 cp .env.example .env            # then set SESSION_SECRET in .env
@@ -68,7 +68,7 @@ More: [docs/deploy-node.md](docs/deploy-node.md) (systemd, Caddy / nginx, backup
 ### Docker
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
 docker compose up -d --build    # http://localhost:3000
 docker compose exec opointeuse node dist/server/cli.mjs add alice --generate-password
@@ -79,7 +79,7 @@ More: [docs/deploy-docker.md](docs/deploy-docker.md).
 ### Cloudflare Workers + D1
 
 ```bash
-git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 npx wrangler login
 npx wrangler d1 create opointeuse        # paste the database_id into wrangler.jsonc
@@ -132,7 +132,7 @@ read by other agents through `AGENTS.md`) and a guided set-up skill (`.claude/sk
 "set up Opointeuse" and it asks the few questions that matter (target, team, time zone, holidays, hours), then runs
 the steps, asking before anything irreversible. Examples:
 
-- "Here is the repo: `https://github.com/<owner>/opointeuse`. Deploy it on my Cloudflare account, create the
+- "Here is the repo: `https://github.com/doooools/Time-clock-Pointeuse`. Deploy it on my Cloudflare account, create the
   first account for me, time zone Europe/Brussels, Belgian holidays."
 - "Install it with Docker on my home server behind Caddy, for a team of 6 people, French interface."
 - "Add a holiday region for the canton of Geneva."

@@ -91,6 +91,7 @@ export function I18nProvider({ locale: controlled, children }: { locale?: Locale
 
   useEffect(() => {
     document.documentElement.lang = locale;
+    document.title = translate(locale, "common.app_title");
   }, [locale]);
 
   const setLocale = useCallback<SetLocale>((l, opts) => {
