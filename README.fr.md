@@ -1,0 +1,141 @@
+# Opointeuse
+
+[![CI](https://github.com/<owner>/opointeuse/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/opointeuse/actions/workflows/ci.yml)
+[![Licence : Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
+
+*Read in English: [README.md](README.md)*
+
+**Une pointeuse auto-hébergée. Vous passez votre téléphone sur une puce NFC (ou vous appuyez sur un bouton, ou un
+lecteur de badge s'en charge) : le pointage est enregistré, l'entrée ou la sortie est déduite toute seule, et
+l'application web affiche votre solde d'heures en temps réel.** Elle est pensée pour une personne seule ou une petite
+équipe, et tourne sur Cloudflare Workers + D1 (offre gratuite), sur n'importe quel serveur Node, ou dans Docker.
+
+<!-- Captures d'écran : les ajouter dans docs/images/ puis les lier ici, par ex.
+![Aujourd'hui](docs/images/today.png) ![Historique](docs/images/history.png) ![Stats](docs/images/stats.png) -->
+
+## Fonctionnalités
+
+- **Pointage par webhook** : un appel HTTP par pointage. Compatible Android (Tasker + puce NFC), iPhone (Raccourcis),
+  `curl`, Home Assistant ou un lecteur de badge mural. Entrées et sorties alternent automatiquement.
+  Voir [docs/integrations/](docs/integrations/README.md).
+- **Solde en temps réel** : temps travaillé aujourd'hui, heure de départ prévue, solde cumulé (heures en plus ou en moins).
+- **Historique éditable** : ajout, modification et suppression de pointages ; signalement des sorties manquantes et des
+  doublons probables ; marquages de journée (congé, maladie, férié, RTT / récupération, jour travaillé, demi-journées).
+- **Statistiques** : semaines, mois, heures d'arrivée et de départ, pauses du midi, calendrier en couleurs.
+- **Import / export** : collez des horodatages depuis un tableur ; export Excel ou CSV.
+- **Multi-comptes** : une personne seule (1 compte) ou une petite entreprise (N comptes) sur la même instance. Les
+  comptes se gèrent en ligne de commande et par une API d'administration (pas de page d'administration).
+- **Français et anglais**, au choix de chaque utilisateur.
+- **Jours fériés** pour 14 régions (France, Alsace-Moselle, Belgique, Luxembourg, Suisse, Canada, Québec, Allemagne,
+  Angleterre et Pays de Galles, États-Unis, Espagne, Italie, Pays-Bas, Portugal), ou aucun. N'importe quel **fuseau
+  horaire** IANA.
+- **Règles configurables** : objectif quotidien, jours ouvrés, pointages un jour de repos, solde et date de départ.
+
+### Règles de calcul en bref
+
+Les pointages d'une journée (dans le fuseau du compte) sont appariés dans l'ordre : 1er–2e, 3e–4e… Un nombre impair de
+pointages un jour passé est signalé « sortie manquante » et la dernière entrée compte pour 0. Un jour ouvré sans
+pointage ni marquage compte comme un déficit complet et est signalé. Le solde se cumule depuis le premier pointage (ou
+depuis une date de départ choisie). Détails : [docs/configuration.md](docs/configuration.md).
+
+## Démarrage rapide
+
+Choisissez une cible. Chacune se termine par la création du premier compte administrateur, puis vous vous connectez
+depuis la page d'accueil. Générez d'abord un secret : `openssl rand -hex 32` (toute chaîne aléatoire de 32 caractères
+ou plus convient).
+
+### Node (machine locale ou VPS)
+
+Nécessite Node ≥ 22.13.
+
+```bash
+git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+npm ci
+npm run build:node
+cp .env.example .env            # puis renseignez SESSION_SECRET dans .env
+npm run user -- add alice --admin --generate-password --db ./data/opointeuse.db
+npm start                       # http://localhost:3000
+```
+
+Suite : [docs/deploy-node.md](docs/deploy-node.md) (systemd, Caddy / nginx, sauvegardes).
+
+### Docker
+
+```bash
+git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
+docker compose up -d --build    # http://localhost:3000
+docker compose exec opointeuse node dist/server/cli.mjs add alice --admin --generate-password
+```
+
+Suite : [docs/deploy-docker.md](docs/deploy-docker.md).
+
+### Cloudflare Workers + D1
+
+```bash
+git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
+npm ci
+npx wrangler login
+npx wrangler d1 create opointeuse        # collez le database_id dans wrangler.jsonc
+npm run db:migrate:remote
+npx wrangler secret put SESSION_SECRET
+npm run deploy
+npm run user -- add alice --admin --generate-password --d1-remote
+```
+
+Suite : [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
+
+### Ensuite
+
+1. Connectez-vous, ouvrez les **Réglages** : choisissez la langue, le fuseau horaire, la région des jours fériés et
+   l'objectif quotidien.
+2. Copiez votre **URL de webhook** et configurez votre téléphone ou votre lecteur :
+   [docs/integrations/](docs/integrations/README.md).
+3. Importez éventuellement votre historique depuis la page **Données**.
+
+## Avec Claude Code
+
+Inutile de suivre les guides à la main. Donnez le lien du dépôt à [Claude Code](https://claude.com/claude-code) avec
+vos besoins, et laissez-le faire l'installation et les modifications. Le dépôt contient un `CLAUDE.md` et un skill de
+mise en place pour qu'il comprenne le projet tout de suite. Exemples de demandes :
+
+- « Voici le dépôt : `https://github.com/<owner>/opointeuse`. Déploie-le sur mon compte Cloudflare, crée-moi un
+  compte administrateur, fuseau Europe/Paris, jours fériés français. »
+- « Installe-le avec Docker sur mon serveur maison derrière Caddy, pour une équipe de 6 personnes, interface en
+  français. »
+- « Ajoute une région de jours fériés pour le canton de Genève. »
+- « Change les couleurs pour un thème bleu nuit. »
+- « Je fais des journées de 8 h avec le vendredi après-midi libre : que dois-je configurer ? »
+
+Commencez par [CLAUDE.md](CLAUDE.md), [docs/architecture.md](docs/architecture.md) et
+[docs/customization.md](docs/customization.md).
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/README.md](docs/README.md) | Index de la documentation |
+| [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md) · [deploy-node.md](docs/deploy-node.md) · [deploy-docker.md](docs/deploy-docker.md) | Guides de déploiement |
+| [docs/configuration.md](docs/configuration.md) | Variables d'environnement, réglages de compte, régions de fériés |
+| [docs/users.md](docs/users.md) | Gestion des comptes en ligne de commande |
+| [docs/api.md](docs/api.md) | Référence de l'API REST |
+| [docs/integrations/](docs/integrations/README.md) | Android, iPhone, HTTP, lecteur de badge |
+| [docs/architecture.md](docs/architecture.md) · [docs/customization.md](docs/customization.md) | Pour les développeurs et les assistants IA |
+| [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) | Contribuer, signaler une faille |
+
+La documentation détaillée est rédigée en anglais.
+
+## Développement
+
+```bash
+npm ci
+npm run dev        # Vite + runtime Workers avec une D1 locale (http://localhost:5173)
+npm test           # tests unitaires et d'intégration
+npm run typecheck
+```
+
+Pour `npm run dev`, copiez `.dev.vars.example` en `.dev.vars` et lancez une fois `npm run db:migrate:local`.
+
+## Licence
+
+[Apache License 2.0](LICENSE).
