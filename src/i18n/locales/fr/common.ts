@@ -17,10 +17,13 @@ export const common = {
 
   navToday: "aujourd'hui",
   navHistory: "historique",
+  navTodayTight: "jour",
+  navHistoryTight: "histo",
   navStats: "statistiques",
   navStatsShort: "stats",
   navData: "données",
   navSettings: "réglages",
+  navTeam: "équipe",
   accountSettings: "Réglages du compte",
   logout: "déconnexion",
 
@@ -74,4 +77,19 @@ export const common = {
   ribbonFullDayAt: "Journée complète à {time}",
   ribbonMissingExit: "Sortie manquante : cette entrée n'est pas comptée",
   ribbonBreak: "casse-croûte {dur}",
+
+  // Viewing a team member's hours (/team/:id)
+  subjectViewing: "Vous consultez les heures du compte « {name} »",
+  subjectReadOnly: "lecture seule",
+  subjectCanEdit: "correction autorisée : chaque changement est journalisé et {name} en est prévenu",
+  subjectBack: "← équipe",
+  subjectJournal: "journal de ses modifications",
+  subjectEmpty: "Aucun pointage sur ce compte pour l'instant.",
+  subjectReadOnlyNote: "Lecture seule : vous pouvez consulter ces heures, pas les modifier.",
+  subjectLoadFailed: "Impossible d'afficher les heures de ce compte (inexistant ou non visible).",
+  loadFailed: "Impossible de charger les données. Réessayez dans un instant.",
+  retry: "réessayer",
+
+  // Rights
+  editOwnForbidden: "Votre compte ne permet pas de modifier vos pointages : demandez à un administrateur.",
 } as const satisfies Record<string, string>;

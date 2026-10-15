@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { workdaysPerWeek } from "../../shared/compute";
 import { HOLIDAY_REGIONS, NO_HOLIDAYS } from "../../shared/holidays";
 import type { Settings } from "../../shared/settings";
 import { canonicalTimeZone } from "../../shared/time";
 import IntegrationsGuide from "../components/IntegrationsGuide";
 import { cx, LangSwitch, Toggle } from "../components/Widgets";
-import { useLocale, useT } from "../i18n";
-import { api, ApiError, UnauthorizedError, type SettingsInfo, type SettingsPatch } from "../lib/api";
+import { useLocale, useT, type TKey } from "../i18n";
+import { api, ApiError, UnauthorizedError, type Role, type SettingsInfo, type SettingsPatch } from "../lib/api";
+import { useMe } from "../lib/me";
 import { dayShort, fullDate, parseHm, parseSignedHm } from "../lib/dates";
 import { dur, signed } from "../lib/fmt";
 import { useStore } from "../lib/store";
@@ -473,9 +474,58 @@ function PasswordForm() {
   );
 }
 
+const ROLE_LABELS = {
+  owner: "settings.roleOwner",
+  admin: "settings.roleAdmin",
+  user: "settings.roleUser",
+} as const satisfies Record<Role, TKey>;
+
+/** Effective rights of my account, read only (set by an administrator, enforced by the server). */
+function RightsList() {
+  const t = useT();
+  const { role, capabilities: c } = useMe();
+  const staff = role !== "user";
+  const rows: [TKey, boolean][] = [
+    ["settings.rightEditOwn", c.editOwn],
+    ["settings.rightViewPresence", c.viewPresence],
+    ["settings.rightViewTeam", c.viewTeam],
+    // Only owners and admins can have these: not listed for a user.
+    ...(staff
+      ? ([
+          ["settings.rightEditOthers", c.editOthers],
+          ["settings.rightManageUsers", c.manageUsers],
+          ["settings.rightManageAdmins", c.manageAdmins],
+        ] as [TKey, boolean][])
+      : []),
+  ];
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="lbl">{t("settings.rightsLabel")}</div>
+      <ul className="flex flex-col gap-1">
+        {rows.map(([label, on]) => (
+          <li key={label} className={cx("flex items-baseline gap-2.5", !on && "text-paper-muted")}>
+            <span aria-hidden className={cx("w-4 font-bold", on ? "text-yellow" : "text-paper-dim")}>
+              {on ? "✓" : "✕"}
+            </span>
+            <span>
+              {t(label)}
+              <span className="sr-only"> : {t(on ? "settings.rightYes" : "settings.rightNo")}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Help>{t(staff ? "settings.rightsHelpAdmin" : "settings.rightsHelpUser")}</Help>
+      <Link to="/journal" className="self-start font-label text-sm text-yellow underline decoration-dotted underline-offset-4 hover:no-underline">
+        {t("settings.journalLink")}
+      </Link>
+    </div>
+  );
+}
+
 function AccountSection({ info, reload }: { info: SettingsInfo | null; reload: () => Promise<void> }) {
   const t = useT();
-  const { user, logout, saveSettings } = useStore();
+  const user = useMe();
+  const { logout, saveSettings } = useStore();
   const { setLocale } = useLocale();
   const localeIsDefault = info ? !("locale" in info.stored) : false;
 
@@ -493,17 +543,20 @@ function AccountSection({ info, reload }: { info: SettingsInfo | null; reload: (
       <div className="flex flex-col gap-5 border-2 border-paper px-4 py-4 lg:px-5 lg:py-[18px]">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
           <dt className="lbl">{t("settings.usernameLabel")}</dt>
-          <dd className="font-bold break-all">
-            {user.username}
-            {user.role === "admin" && <span className="ml-2 bg-paper px-1.5 font-label text-xs text-onpaper uppercase">{t("settings.roleAdmin")}</span>}
-          </dd>
+          <dd className="font-bold break-all">{user.username}</dd>
           {user.displayName && (
             <>
               <dt className="lbl">{t("settings.displayNameLabel")}</dt>
               <dd className="break-all">{user.displayName}</dd>
             </>
           )}
+          <dt className="lbl">{t("settings.roleLabel")}</dt>
+          <dd>
+            <span className="bg-paper px-1.5 font-label text-xs text-onpaper uppercase">{t(ROLE_LABELS[user.role])}</span>
+          </dd>
         </dl>
+
+        <RightsList />
 
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">

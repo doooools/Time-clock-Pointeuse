@@ -150,7 +150,7 @@ export default function Stats() {
   const { locale } = useLocale();
   const dayLabel = (date: string) => dayLabelIn(locale, date);
   const hint = pickHint(t("stats.pick_hint"));
-  const { days: allDays, settings } = useStore();
+  const { days: allDays, settings, subject, canEdit } = useStore();
   const desktop = useIsDesktop();
   const [period, setPeriod] = useState<Period>("1a");
   const tz = settings.timezone;
@@ -523,9 +523,11 @@ export default function Stats() {
           </div>
           <div className="flex flex-wrap gap-3 text-[15px] text-paper-soft">
             {t("stats.empty_hint")}
-            <Link to="/data" className="font-label text-yellow hover:text-pink">
-              {t("stats.empty_import")}
-            </Link>
+            {subject.isMe && canEdit && (
+              <Link to="/data" className="font-label text-yellow hover:text-pink">
+                {t("stats.empty_import")}
+              </Link>
+            )}
           </div>
         </div>
       ) : (

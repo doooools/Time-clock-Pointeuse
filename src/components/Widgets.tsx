@@ -217,6 +217,23 @@ export function DayTypeBadge({ day, className }: { day: Pick<DayResult, "mark" |
   return <span className={cx("inline-block px-2 py-0.5 font-label uppercase", style, className)}>{text}</span>;
 }
 
+/* ─────────────── Read-only note ─────────────── */
+
+/**
+ * Short explanation shown where editing controls would be when the data cannot be changed: my account without
+ * `editOwn`, or a member viewed read only.
+ */
+export function ReadOnlyNote({ className }: { className?: string }) {
+  const t = useT();
+  const { subject, canEdit } = useStore();
+  if (canEdit) return null;
+  return (
+    <p className={cx("font-label text-sm text-paper-muted", className)}>
+      {subject.isMe ? t("common.editOwnForbidden") : t("common.subjectReadOnlyNote")}
+    </p>
+  );
+}
+
 /* ─────────────── Empty state ─────────────── */
 
 /** Welcoming block for a page without data: tilted "?", title, text and the two ways to get punches in. */
@@ -232,6 +249,7 @@ export function EmptyState({
   children?: ReactNode;
 }) {
   const t = useT();
+  const { subject, canEdit } = useStore();
   return (
     <div className="flex flex-col items-start gap-7 py-10 lg:flex-row lg:items-center lg:py-20">
       <div aria-hidden className="-rotate-[5deg] bg-yellow px-[22px] py-1.5 font-display text-[120px] leading-none text-onpaper">
@@ -239,14 +257,19 @@ export function EmptyState({
       </div>
       <div className="flex max-w-[480px] flex-col gap-3">
         <Heading className="font-display text-[30px] tracking-[.02em]">{title ?? t("common.emptyTitle")}</Heading>
-        <p className="leading-[1.45] text-pretty text-paper-soft">{text}</p>
+        {/* A member's empty account: nothing to set up from here. */}
+        <p className="leading-[1.45] text-pretty text-paper-soft">{subject.isMe ? text : t("common.subjectEmpty")}</p>
         <div className="flex flex-wrap gap-3">
-          <Link to="/settings#tuto" className="btn-primary px-3.5 py-2 text-[15px]">
-            {t("common.emptySetup")}
-          </Link>
-          <Link to="/data" className="btn-secondary px-3.5 py-2 text-[15px]">
-            {t("common.emptyImport")}
-          </Link>
+          {subject.isMe && (
+            <Link to="/settings#tuto" className="btn-primary px-3.5 py-2 text-[15px]">
+              {t("common.emptySetup")}
+            </Link>
+          )}
+          {subject.isMe && canEdit && (
+            <Link to="/data" className="btn-secondary px-3.5 py-2 text-[15px]">
+              {t("common.emptyImport")}
+            </Link>
+          )}
           {children}
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
   DayTypeBadge,
   Delta,
   EmptyState,
+  ReadOnlyNote,
   pauseMinutes,
   Ransom,
   reachedAt,
@@ -68,7 +69,9 @@ function ExitCard({
 export default function Dashboard() {
   const t = useT();
   const { locale } = useLocale();
-  const { byDay, marks, settings, punchNow } = useStore();
+  const { byDay, marks, settings, punchNow, canEdit, subject, path } = useStore();
+  // "Punch now" is for my own day; a member's punches are corrected from their history.
+  const canPunch = canEdit && subject.isMe;
   const tz = settings.timezone;
   const clock = (ts: number) => formatClock(ts, tz);
   const now = useNow(1000);
@@ -309,7 +312,7 @@ export default function Dashboard() {
               {pauseMinutes(day) > 0 ? t("dashboard.ribbonPause", { dur: dur(pauseMinutes(day)) }) : ""}
             </span>
           </span>
-          {!past && <span className="hidden lg:inline">{punchButton}</span>}
+          {!past && canPunch && <span className="hidden lg:inline">{punchButton}</span>}
         </div>
         <DayRibbon day={day} now={viewNow} endForDayAt={st.present ? st.endForDayAt : null} compact={!desktop} />
       </section>
@@ -361,7 +364,7 @@ export default function Dashboard() {
               {anomalies.slice(0, 5).map((d, i) => (
                 <Link
                   key={d.date}
-                  to={`/history?month=${monthKey(d.date)}&day=${d.date}`}
+                  to={path(`/history?month=${monthKey(d.date)}&day=${d.date}`)}
                   className={cx(
                     "flex min-h-11 items-center justify-between gap-2 px-3.5 py-2.5 text-[15px] text-onpaper lg:text-base",
                     i % 2 === 0 ? "rotate-[.7deg] bg-pink hover:bg-pink-hover" : "-rotate-[.7deg] bg-paper hover:bg-white",
@@ -375,7 +378,7 @@ export default function Dashboard() {
                 </Link>
               ))}
               {anomalies.length > 5 && (
-                <Link to="/history?anomalies=1" className="font-label text-sm text-paper-muted hover:text-yellow">
+                <Link to={path("/history?anomalies=1")} className="font-label text-sm text-paper-muted hover:text-yellow">
                   {t("dashboard.moreAnomalies", { count: anomalies.length - 5 })}
                 </Link>
               )}
@@ -385,7 +388,8 @@ export default function Dashboard() {
       </div>
 
       {/* Mobile backup */}
-      <div className={cx("pt-5 lg:hidden", past && "hidden")}>
+      {subject.isMe && !canEdit && <ReadOnlyNote className="pt-5" />}
+      <div className={cx("pt-5 lg:hidden", (past || !canPunch) && "hidden")}>
         <button
           className="min-h-12 w-full cursor-pointer border-2 border-pink font-label text-base text-pink disabled:opacity-50"
           onClick={onPunch}

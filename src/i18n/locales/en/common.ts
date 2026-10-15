@@ -19,10 +19,13 @@ export const common: Record<keyof typeof fr, string> = {
 
   navToday: "today",
   navHistory: "history",
+  navTodayTight: "today",
+  navHistoryTight: "history",
   navStats: "statistics",
   navStatsShort: "stats",
   navData: "data",
   navSettings: "settings",
+  navTeam: "team",
   accountSettings: "Account settings",
   logout: "sign out",
 
@@ -70,4 +73,19 @@ export const common: Record<keyof typeof fr, string> = {
   ribbonFullDayAt: "Full day at {time}",
   ribbonMissingExit: "Missing exit: this entry is not counted",
   ribbonBreak: "lunch break {dur}",
+
+  // Viewing a team member's hours (/team/:id)
+  subjectViewing: "You are viewing {name}'s hours",
+  subjectReadOnly: "read only",
+  subjectCanEdit: "corrections allowed: every change is logged and {name} is notified",
+  subjectBack: "← team",
+  subjectJournal: "log of their changes",
+  subjectEmpty: "No punches on this account yet.",
+  subjectReadOnlyNote: "Read only: you can view these hours, not change them.",
+  subjectLoadFailed: "This account's hours cannot be shown (it does not exist or is not visible to you).",
+  loadFailed: "The data could not be loaded. Try again in a moment.",
+  retry: "retry",
+
+  // Rights
+  editOwnForbidden: "Your account cannot change its punches: ask an administrator.",
 };

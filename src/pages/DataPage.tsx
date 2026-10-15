@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { PARSE_ISSUE_LABELS } from "../../shared/labels";
 import { parseRawTimestamps, type DateOrder, type ParseResult } from "../../shared/parse";
 import { dayKey, formatClock, monthKey } from "../../shared/time";
-import { arrowOf, cx, Segmented } from "../components/Widgets";
+import { arrowOf, cx, ReadOnlyNote, Segmented } from "../components/Widgets";
 import { dayLabel as dayLabelIn, monthLabel } from "../lib/dates";
 import { useLocale, useT } from "../i18n";
 import { exportCsv, exportXlsx } from "../lib/export";
@@ -338,11 +338,25 @@ function ImportSection() {
   );
 }
 
+/** Import needs the right to change my punches; without it, the section only explains why. */
+function ImportForbidden() {
+  const t = useT();
+  return (
+    <section className="flex min-w-0 flex-col gap-[18px]" aria-labelledby="import-title">
+      <h2 id="import-title" className="rotate-[1.5deg] self-start bg-yellow px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
+        {t("data.import_title")}
+      </h2>
+      <ReadOnlyNote />
+    </section>
+  );
+}
+
 export default function DataPage() {
+  const { canEdit } = useStore();
   return (
     <div className="grid items-start gap-12 pt-6 lg:grid-cols-[480px_1fr] lg:gap-10 lg:pt-10">
       <ExportSection />
-      <ImportSection />
+      {canEdit ? <ImportSection /> : <ImportForbidden />}
     </div>
   );
 }

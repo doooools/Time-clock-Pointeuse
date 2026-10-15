@@ -21,6 +21,7 @@ import {
   DayTypeBadge,
   Delta,
   EmptyState,
+  ReadOnlyNote,
   Kpi,
   Stamp,
   toneOf,
@@ -473,7 +474,7 @@ export default function History() {
   const { locale } = useLocale();
   const dayLabel = (date: string) => dayLabelIn(locale, date);
   const monthName = (month: string) => monthNameIn(locale, Number(month.slice(5, 7)));
-  const { days, byDay, marks, settings } = useStore();
+  const { days, byDay, marks, settings, canEdit, subject } = useStore();
   const tz = settings.timezone;
   const now = useNow(60_000);
   const desktop = useIsDesktop();
@@ -531,7 +532,8 @@ export default function History() {
   const workedCount = monthDays.filter((d) => d.punches.length > 0 || d.targetMin > 0).length;
   const isCurrent = month === monthKey(today);
   const canNext = month < monthKey(today);
-  const editing = monthDays.find((d) => d.date === openDay) ?? null;
+  // Read only: `?day=` (e.g. from a notification) only highlights the row, the editor stays closed.
+  const editing = (canEdit && monthDays.find((d) => d.date === openDay)) || null;
 
   const go = (delta: number) => {
     setOpenDay(null);
@@ -541,7 +543,7 @@ export default function History() {
   const monthDelta = monthSum?.deltaMin ?? 0;
   const endBalance = monthSum?.endBalanceMin ?? 0;
 
-  const forgotDialog = forgotOpen && (
+  const forgotDialog = forgotOpen && canEdit && (
     <ForgottenDialog
       onClose={() => setForgotOpen(false)}
       onAdded={(date) => {
@@ -556,10 +558,13 @@ export default function History() {
       <div className="flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-4 pt-5 lg:pt-9">
           <h1 className="page-title">{t("common.navHistory")}</h1>
-          <button className="btn-primary rotate-1" onClick={() => setForgotOpen(true)}>
-            {t("history.add_forgotten")}
-          </button>
+          {canEdit && (
+            <button className="btn-primary rotate-1" onClick={() => setForgotOpen(true)}>
+              {t("history.add_forgotten")}
+            </button>
+          )}
         </div>
+        {subject.isMe && <ReadOnlyNote className="pt-3" />}
         <EmptyState text={t("history.empty_text")} />
         {forgotDialog}
       </div>
@@ -593,11 +598,14 @@ export default function History() {
             {t("history.only_anomalies")}
             {anomalyCount > 0 && ` (${anomalyCount})`}
           </Checkbox>
-          <button className="btn-primary rotate-1" onClick={() => setForgotOpen(true)}>
-            {t("history.add_forgotten")}
-          </button>
+          {canEdit && (
+            <button className="btn-primary rotate-1" onClick={() => setForgotOpen(true)}>
+              {t("history.add_forgotten")}
+            </button>
+          )}
         </div>
       </div>
+      {subject.isMe && <ReadOnlyNote className="pt-3" />}
 
       {/* Month summary */}
       <div className="grid grid-cols-2 gap-2 pt-[18px] lg:grid-cols-4 lg:gap-5 lg:pt-8">
@@ -622,9 +630,11 @@ export default function History() {
             </span>
           </Checkbox>
         </div>
-        <button className="btn-primary min-h-11 px-3.5 py-0 text-sm" onClick={() => setForgotOpen(true)}>
-          {t("history.add_forgotten_short")}
-        </button>
+        {canEdit && (
+          <button className="btn-primary min-h-11 px-3.5 py-0 text-sm" onClick={() => setForgotOpen(true)}>
+            {t("history.add_forgotten_short")}
+          </button>
+        )}
       </div>
 
       {onlyAnomalies && (
@@ -727,18 +737,26 @@ export default function History() {
                           </span>
                         )}
                       </span>
-                      <button
-                        className="cursor-pointer text-right font-label text-sm text-paper-muted hover:text-yellow"
-                        onClick={() => toggle(d.date)}
-                        aria-expanded={open}
-                      >
-                        {open ? t("history.close_row") : t("history.fix")}
-                      </button>
+                      {canEdit ? (
+                        <button
+                          className="cursor-pointer text-right font-label text-sm text-paper-muted hover:text-yellow"
+                          onClick={() => toggle(d.date)}
+                          aria-expanded={open}
+                        >
+                          {open ? t("history.close_row") : t("history.fix")}
+                        </button>
+                      ) : (
+                        <span />
+                      )}
                     </div>
                     {/* Mobile row */}
                     <button
-                      className="flex min-h-11 w-full cursor-pointer flex-col justify-center gap-1.5 border-b border-line px-1 py-2.5 text-left lg:hidden"
-                      onClick={() => toggle(d.date)}
+                      className={cx(
+                        "flex min-h-11 w-full cursor-pointer flex-col justify-center gap-1.5 border-b border-line px-1 py-2.5 text-left lg:hidden",
+                        open && !canEdit && "bg-shade",
+                      )}
+                      // Read only: the row opens the day on "Today" instead of the editor.
+                      onClick={() => (canEdit ? toggle(d.date) : showDay(d.date))}
                     >
                       <span className="flex w-full items-baseline justify-between text-[15px]">
                         <b className={cx(d.isToday && "text-pink")}>{dayLabel(d.date)}</b>
@@ -754,7 +772,7 @@ export default function History() {
                         <DayTypeBadge day={d} className="text-xs" />
                       </span>
                     </button>
-                    {open && desktop && <DayEditor day={d} sheet={false} onClose={() => setOpenDay(null)} />}
+                    {open && desktop && canEdit && <DayEditor day={d} sheet={false} onClose={() => setOpenDay(null)} />}
                   </div>
                 );
               })}

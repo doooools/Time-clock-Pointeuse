@@ -7,8 +7,9 @@ const FOCUSABLE =
  * Keyboard behaviour of a modal dialog: Escape closes it, focus moves into it on open (the element with
  * `autoFocus` wins, else the first focusable one), Tab cycles inside it, and focus returns to the element
  * that opened it when it closes. Attach the returned ref to the dialog container.
+ * `onClose = null`: a dialog that only its own button closes (Escape does nothing).
  */
-export function useModal<T extends HTMLElement>(onClose: () => void): RefObject<T | null> {
+export function useModal<T extends HTMLElement>(onClose: (() => void) | null): RefObject<T | null> {
   const ref = useRef<T>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -24,7 +25,7 @@ export function useModal<T extends HTMLElement>(onClose: () => void): RefObject<
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        close.current();
+        close.current?.();
         return;
       }
       if (e.key !== "Tab" || !ref.current) return;
