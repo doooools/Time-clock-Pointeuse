@@ -5,15 +5,17 @@ import { fail, readBody } from "./http";
 import { hashPassword, verifyPassword } from "./passwords";
 import { SESSION_COOKIE, SESSION_DAYS, SESSION_MS, signSession, verifySession } from "./session";
 import {
+  capabilities,
   clearLoginFailures,
   getUserById,
   getUserByUsername,
   instanceDefaults,
   lockRemainingMs,
   LOGIN_LOCK_MS,
-  publicUser,
+  meView,
   reserveLoginAttempt,
   resolveUserSettings,
+  type Capabilities,
 } from "./users";
 import { resolveSettings } from "../shared/settings";
 
@@ -65,11 +67,13 @@ export const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
-/** Must run after `requireSession`. */
-export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
-  if (c.get("user").role !== "admin") return fail(c, 403, "forbidden");
-  await next();
-};
+/** 403 unless the signed-in user has this capability (see `capabilities`). Must run after `requireSession`. */
+export const requireCapability =
+  (name: keyof Capabilities): MiddlewareHandler<AppEnv> =>
+  async (c, next) => {
+    if (!capabilities(c.get("user"))[name]) return fail(c, 403, "forbidden");
+    await next();
+  };
 
 export const authRoutes = new Hono<AppEnv>()
   .get("/me", async (c) => {
@@ -78,7 +82,7 @@ export const authRoutes = new Hono<AppEnv>()
       return c.json({ authenticated: false, defaultLocale: resolveSettings(instanceDefaults(c.env)).locale });
     }
     const { locale } = resolveUserSettings(c.env, user);
-    return c.json({ authenticated: true, user: publicUser(user), locale });
+    return c.json({ authenticated: true, user: meView(user), locale });
   })
   .post("/login", async (c) => {
     const body = await readBody(c);

@@ -5,6 +5,9 @@ import type { AppEnv } from "./env";
 import { fail } from "./http";
 import { adminRoutes } from "./routes/admin";
 import { apiRoutes } from "./routes/api";
+import { journalRoutes } from "./routes/journal";
+import { presenceRoutes } from "./routes/presence";
+import { teamRoutes } from "./routes/team";
 import { webhookRoutes } from "./routes/webhook";
 import { apiBodyLimit, csrfGuard, securityHeaders } from "./security";
 import { isValidSecret, MIN_SECRET_LENGTH } from "./session";
@@ -34,6 +37,10 @@ app.route("/api/webhook", webhookRoutes);
 app.route("/api", authRoutes);
 app.use("/api/*", requireSession);
 app.route("/api/admin", adminRoutes);
+// Presence (`/api/team/presence`) before the team routes, so "presence" is never read as a member id.
+app.route("/api", presenceRoutes);
+app.route("/api", journalRoutes);
+app.route("/api/team", teamRoutes);
 app.route("/api", apiRoutes);
 app.all("/api/*", (c) => fail(c, 404, "notFound"));
 

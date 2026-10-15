@@ -5,8 +5,9 @@ const count = async (env: ReturnType<typeof makeEnv>, table: string, userId: num
   (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?`).bind(userId).first<{ n: number }>())!.n;
 
 describe("admin API: access", () => {
-  it("answers 403 to non-admins on every admin route, localized", async () => {
+  it("answers 403 to accounts without manageUsers on every admin route, localized", async () => {
     const env = makeEnv();
+    await addUser(env, "olive"); // first account: owner
     const { client } = await addUser(env, "carol", { settings: { locale: "fr" } });
     const routes: Array<[string, string, unknown?]> = [
       ["GET", "/api/admin/users"],
@@ -14,12 +15,11 @@ describe("admin API: access", () => {
       ["PATCH", "/api/admin/users/1", { role: "admin" }],
       ["POST", "/api/admin/users/1/webhook-token"],
       ["DELETE", "/api/admin/users/1"],
-      ["GET", "/api/admin/users/1/data"],
     ];
     for (const [method, path, body] of routes) {
       const res = await client.request(method, path, body);
       expect(res.status, `${method} ${path}`).toBe(403);
-      expect(res.body.error).toBe("Cette action nécessite le rôle administrateur.");
+      expect(res.body.error).toBe("Action non autorisée.");
     }
   });
 });
@@ -34,7 +34,8 @@ describe("admin API: accounts", () => {
       id: alice.row.id,
       username: "alice",
       displayName: null,
-      role: "admin",
+      role: "owner",
+      permissions: { editOwn: true, viewPresence: false, viewTeam: false },
       disabled: false,
       createdAt: expect.any(Number),
       locked: false,
@@ -135,7 +136,7 @@ describe("admin API: accounts", () => {
       expect((await c.patch(`/api/admin/users/${badId}`, { role: "user" })).status, badId).toBe(404);
       expect((await c.del(`/api/admin/users/${badId}`)).status, badId).toBe(404);
       expect((await c.post(`/api/admin/users/${badId}/webhook-token`)).status, badId).toBe(404);
-      expect((await c.get(`/api/admin/users/${badId}/data`)).status, badId).toBe(404);
+      expect((await c.get(`/api/team/${badId}/data`)).status, badId).toBe(404);
     }
   });
 
@@ -169,18 +170,20 @@ describe("admin API: accounts", () => {
     expect((await bob.client.get("/api/settings")).body.webhookToken).toBe(res.body.webhookToken);
   });
 
-  it("reads another account's data through /users/:id/data", async () => {
+  it("reads another account's data through /api/team/:id/data (the old admin data route is gone)", async () => {
     const { alice, bob } = await twoAccounts();
     await bob.client.post("/api/punches", { ts: at(8) });
     await bob.client.put("/api/days/2025-03-12/mark", { type: "leave" });
     await bob.client.put("/api/settings", { locale: "fr" });
-    const res = await alice.client.get(`/api/admin/users/${bob.row.id}/data`);
+    expect((await alice.client.get(`/api/admin/users/${bob.row.id}/data`)).status).toBe(404);
+    const res = await alice.client.get(`/api/team/${bob.row.id}/data`);
     expect(res.status).toBe(200);
+    expect(res.body.canEdit).toBe(true);
     expect(res.body.user).toMatchObject({ username: "bob" });
     expect(res.body.punches).toHaveLength(1);
     expect(res.body.marks).toHaveLength(1);
     expect(res.body.settings.locale).toBe("fr");
-    expect(Object.keys(res.body).sort()).toEqual(Object.keys((await alice.client.get("/api/data")).body).sort());
+    expect(Object.keys(res.body).sort()).toEqual([...Object.keys((await alice.client.get("/api/data")).body), "canEdit"].sort());
     // Alice's own data is unchanged.
     expect((await alice.client.get("/api/data")).body.punches).toEqual([]);
   });
@@ -206,48 +209,50 @@ describe("admin API: accounts", () => {
   });
 });
 
-describe("admin API: last-admin guard", () => {
-  it("refuses to demote, disable or delete the only active admin", async () => {
-    const { env, alice } = await twoAccounts();
+describe("admin API: last-owner guard", () => {
+  it("refuses to demote, disable or delete the only active owner", async () => {
+    const { alice } = await twoAccounts();
     const c = alice.client;
     const id = alice.row.id;
-    for (const body of [{ role: "user" }, { disabled: true }]) {
+    for (const body of [{ role: "user" }, { role: "admin" }, { disabled: true }]) {
       const res = await c.patch(`/api/admin/users/${id}`, body);
       expect(res.status, JSON.stringify(body)).toBe(409);
-      expect(res.body.error).toBe("Not allowed: this is the last active admin account.");
+      expect(res.body.error).toBe("Not allowed: this is the last active owner account.");
     }
     expect((await c.del(`/api/admin/users/${id}`)).status).toBe(409);
     // Nothing changed.
-    expect((await c.get("/api/admin/users")).body.users[0]).toMatchObject({ role: "admin", disabled: false });
+    expect((await c.get("/api/admin/users")).body.users[0]).toMatchObject({ role: "owner", disabled: false });
     expect((await c.get("/api/data")).status).toBe(200);
   });
 
-  it("allows it while another active admin exists, then protects the remaining one", async () => {
+  it("allows it while another active owner exists, then protects the remaining one", async () => {
     const { alice, bob } = await twoAccounts();
-    await alice.client.patch(`/api/admin/users/${bob.row.id}`, { role: "admin" });
-    // Alice demotes herself: allowed, Bob is still an admin.
+    await alice.client.patch(`/api/admin/users/${bob.row.id}`, { role: "owner" });
+    // Alice demotes herself: allowed, Bob is still an owner.
     expect((await alice.client.patch(`/api/admin/users/${alice.row.id}`, { role: "user" })).status).toBe(200);
     expect((await alice.client.get("/api/admin/users")).status).toBe(403);
     // Bob is now the last one.
-    expect((await bob.client.patch(`/api/admin/users/${bob.row.id}`, { role: "user" })).status).toBe(409);
+    expect((await bob.client.patch(`/api/admin/users/${bob.row.id}`, { role: "admin" })).status).toBe(409);
     expect((await bob.client.patch(`/api/admin/users/${bob.row.id}`, { disabled: true })).status).toBe(409);
     expect((await bob.client.del(`/api/admin/users/${bob.row.id}`)).status).toBe(409);
   });
 
-  it("does not count a disabled admin as active", async () => {
-    const { alice, bob } = await twoAccounts();
-    await alice.client.patch(`/api/admin/users/${bob.row.id}`, { role: "admin" });
+  it("does not count admins, nor a disabled owner, as active owners", async () => {
+    const { env, alice, bob } = await twoAccounts();
+    const carol = await addUser(env, "carol", { role: "admin" });
+    await alice.client.patch(`/api/admin/users/${bob.row.id}`, { role: "owner" });
     await alice.client.patch(`/api/admin/users/${bob.row.id}`, { disabled: true });
-    // Bob is a disabled admin: Alice is the only active one.
-    expect((await alice.client.patch(`/api/admin/users/${alice.row.id}`, { role: "user" })).status).toBe(409);
+    // Bob is a disabled owner, Carol an admin: Alice is the only active owner.
+    expect((await alice.client.patch(`/api/admin/users/${alice.row.id}`, { role: "admin" })).status).toBe(409);
     expect((await alice.client.del(`/api/admin/users/${alice.row.id}`)).status).toBe(409);
-    // Deleting the disabled admin is fine.
+    // Deleting the disabled owner, or the admin, is fine.
     expect((await alice.client.del(`/api/admin/users/${bob.row.id}`)).status).toBe(200);
+    expect((await alice.client.del(`/api/admin/users/${carol.row.id}`)).status).toBe(200);
   });
 
-  it("lets an admin delete another admin when one remains", async () => {
+  it("lets an owner delete another owner when one remains", async () => {
     const { alice, bob } = await twoAccounts();
-    await alice.client.patch(`/api/admin/users/${bob.row.id}`, { role: "admin" });
+    await alice.client.patch(`/api/admin/users/${bob.row.id}`, { role: "owner" });
     expect((await alice.client.del(`/api/admin/users/${bob.row.id}`)).status).toBe(200);
     expect((await alice.client.get("/api/admin/users")).body.users).toHaveLength(1);
   });

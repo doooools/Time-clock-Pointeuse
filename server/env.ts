@@ -15,7 +15,8 @@ export type Env = {
   DEFAULT_DAILY_TARGET_MIN?: string;
 };
 
-export type Role = "admin" | "user";
+/** owner = superadmin (manages owners and admins too), admin = manages `user` accounts, user = own data. */
+export type Role = "owner" | "admin" | "user";
 
 /** Row of the `users` table. */
 export type UserRow = {
@@ -24,14 +25,18 @@ export type UserRow = {
   display_name: string | null;
   password_hash: string;
   role: Role;
+  /** Permissions of a `user` account (0/1); owners and admins have everything implicitly. */
+  perm_edit_own: number;
+  perm_view_presence: number;
+  perm_view_team: number;
   webhook_token: string;
   settings: string;
   session_version: number;
   created_at: number;
   disabled_at: number | null;
-  /** Consecutive failed password checks (migration 0002). */
+  /** Consecutive failed password checks. */
   failed_logins: number;
-  /** Password checks are refused until this epoch ms (migration 0002); null = not locked. */
+  /** Password checks are refused until this epoch ms; null = not locked. */
   locked_until: number | null;
 };
 

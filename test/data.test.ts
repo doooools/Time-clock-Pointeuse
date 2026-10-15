@@ -13,7 +13,7 @@ describe("punches", () => {
     let data = (await c.get("/api/data")).body;
     expect(data.punches).toHaveLength(1);
     expect(data.marks).toEqual([]);
-    expect(data.user).toMatchObject({ username: "alice", role: "admin" });
+    expect(data.user).toMatchObject({ username: "alice", role: "owner" });
     expect(typeof data.serverNow).toBe("number");
     expect(data.settings.timezone).toBe("UTC");
 

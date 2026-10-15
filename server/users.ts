@@ -5,7 +5,7 @@ import type { Db } from "./db/types";
 import type { Env, Role, UserRow } from "./env";
 import { generateToken, hashPassword } from "./passwords";
 
-export const ROLES: Role[] = ["admin", "user"];
+export const ROLES: Role[] = ["owner", "admin", "user"];
 export const USERNAME_MAX = 64;
 export const DISPLAY_NAME_MAX = 100;
 export const PASSWORD_MIN = 8;
@@ -25,10 +25,109 @@ export function passwordProblem(v: unknown): PasswordProblem | null {
   return null;
 }
 
+// --- Roles, permissions and capabilities ---
+
+/** Per-account permissions (columns `perm_*`). Meaningful for the `user` role; owners and admins have everything. */
+export type Permissions = { editOwn: boolean; viewPresence: boolean; viewTeam: boolean };
+export const PERMISSION_KEYS = ["editOwn", "viewPresence", "viewTeam"] as const;
+/** Column of each permission in the `users` table. */
+export const PERMISSION_COLUMNS: Record<keyof Permissions, "perm_edit_own" | "perm_view_presence" | "perm_view_team"> = {
+  editOwn: "perm_edit_own",
+  viewPresence: "perm_view_presence",
+  viewTeam: "perm_view_team",
+};
+/** Column defaults of a new account. */
+export const DEFAULT_PERMISSIONS: Permissions = { editOwn: true, viewPresence: false, viewTeam: false };
+
+/** Effective rights, computed on the server only from the role and the permissions. */
+export type Capabilities = {
+  /** Appoint / remove owners and admins, manage their accounts. */
+  manageAdmins: boolean;
+  /** Create and manage `user` accounts (an owner manages every account). */
+  manageUsers: boolean;
+  /** Correct the hours of another account (an admin: `user` accounts only, see `canEditData`). */
+  editOthers: boolean;
+  viewTeam: boolean;
+  viewPresence: boolean;
+  editOwn: boolean;
+};
+
+type PermissionRow = Pick<UserRow, "perm_edit_own" | "perm_view_presence" | "perm_view_team">;
+type ActorRow = Pick<UserRow, "id" | "role"> & PermissionRow;
+
+export function permissions(u: PermissionRow): Permissions {
+  return { editOwn: !!u.perm_edit_own, viewPresence: !!u.perm_view_presence, viewTeam: !!u.perm_view_team };
+}
+
+export function capabilities(u: Pick<UserRow, "role"> & PermissionRow): Capabilities {
+  const staff = u.role === "owner" || u.role === "admin";
+  const p = permissions(u);
+  return {
+    manageAdmins: u.role === "owner",
+    manageUsers: staff,
+    editOthers: staff,
+    viewTeam: staff || p.viewTeam,
+    viewPresence: staff || p.viewPresence,
+    editOwn: staff || p.editOwn,
+  };
+}
+
+/** May `actor` manage the account `target` (admin API)? Owner: every account; admin: `user` accounts only. */
+export function canManageUser(actor: Pick<UserRow, "role">, target: Pick<UserRow, "role">): boolean {
+  return actor.role === "owner" || (actor.role === "admin" && target.role === "user");
+}
+
+/** May `actor` give the role `role` (on creation or change)? Only an owner hands out `owner` and `admin`. */
+export function canAssignRole(actor: Pick<UserRow, "role">, role: Role): boolean {
+  return actor.role === "owner" || (actor.role === "admin" && role === "user");
+}
+
+/**
+ * May `actor` change the punches and day marks of `subject`? Own data: `editOwn`. Someone else's: an owner
+ * for every account, an admin for `user` accounts.
+ */
+export function canEditData(actor: ActorRow, subject: Pick<UserRow, "id" | "role">): boolean {
+  if (actor.id === subject.id) return capabilities(actor).editOwn;
+  return capabilities(actor).editOthers && canManageUser(actor, subject);
+}
+
+/**
+ * May `actor` read the hours of `subject`? Always their own; others with `viewTeam`. A plain `user` does
+ * not see disabled accounts.
+ */
+export function canViewData(actor: ActorRow, subject: Pick<UserRow, "id" | "disabled_at">): boolean {
+  if (actor.id === subject.id) return true;
+  if (!capabilities(actor).viewTeam) return false;
+  return actor.role !== "user" || subject.disabled_at === null;
+}
+
+/**
+ * Validates a `permissions` patch `{ editOwn?, viewPresence?, viewTeam? }` (booleans, known keys only).
+ * Returns null when invalid.
+ */
+export function parsePermissions(v: unknown): Partial<Permissions> | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const out: Partial<Permissions> = {};
+  for (const [key, value] of Object.entries(v)) {
+    if (!(PERMISSION_KEYS as readonly string[]).includes(key) || typeof value !== "boolean") return null;
+    out[key as keyof Permissions] = value;
+  }
+  return out;
+}
+
+/** `SET` fragments (`perm_x = ?`) and their values (0/1) for a permissions patch. */
+export function permissionsSql(p: Partial<Permissions>): { sets: string[]; values: number[] } {
+  const keys = PERMISSION_KEYS.filter((k) => p[k] !== undefined);
+  return { sets: keys.map((k) => `${PERMISSION_COLUMNS[k]} = ?`), values: keys.map((k) => (p[k] ? 1 : 0)) };
+}
+
 // --- Public shapes ---
 
 export type PublicUser = { id: number; username: string; displayName: string | null; role: Role };
+/** The signed-in user, as `GET /api/me` returns it. */
+export type MeView = PublicUser & { permissions: Permissions; capabilities: Capabilities };
 export type AdminUserView = PublicUser & {
+  permissions: Permissions;
   disabled: boolean;
   createdAt: number;
   /** Password checks are temporarily refused after too many failures (see `reserveLoginAttempt`). */
@@ -41,10 +140,15 @@ export function publicUser(u: UserRow): PublicUser {
   return { id: u.id, username: u.username, displayName: u.display_name, role: u.role };
 }
 
+export function meView(u: UserRow): MeView {
+  return { ...publicUser(u), permissions: permissions(u), capabilities: capabilities(u) };
+}
+
 export function adminUserView(u: UserRow, now = Date.now()): AdminUserView {
   const lockedUntil = lockRemainingMs(u, now) > 0 ? u.locked_until : null;
   return {
     ...publicUser(u),
+    permissions: permissions(u),
     disabled: u.disabled_at !== null,
     createdAt: u.created_at,
     locked: lockedUntil !== null,
@@ -104,8 +208,8 @@ export function applySettingsPatch(
 // --- Queries ---
 
 const COLUMNS =
-  "id, username, display_name, password_hash, role, webhook_token, settings, session_version, created_at, disabled_at, " +
-  "failed_logins, locked_until";
+  "id, username, display_name, password_hash, role, perm_edit_own, perm_view_presence, perm_view_team, webhook_token, " +
+  "settings, session_version, created_at, disabled_at, failed_logins, locked_until";
 
 export function getUserById(db: Db, id: number): Promise<UserRow | null> {
   return db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ?`).bind(id).first<UserRow>();
@@ -129,14 +233,18 @@ export type NewUser = {
   username: string;
   password: string;
   displayName?: string | null;
+  /** Ignored for the very first account, which is always `owner`. Default `user`. */
   role?: Role;
+  /** Missing keys take `DEFAULT_PERMISSIONS`. */
+  permissions?: Partial<Permissions>;
   /** Must already be sanitized. */
   settings?: Partial<Settings>;
 };
 
 /**
- * Inserts a user. Validation is the caller's job (see `isValidUsername`, `passwordProblem`).
- * Returns null if the username is already taken.
+ * Inserts a user. Validation and authorization are the caller's job (see `isValidUsername`,
+ * `passwordProblem`, `canAssignRole`). The first account of an empty instance is forced to `owner`
+ * (atomically, in the INSERT). Returns null if the username is already taken.
  */
 export async function createUser(db: Db, input: NewUser, now = Date.now()): Promise<UserRow | null> {
   if (await getUserByUsername(db, input.username)) return null;
@@ -144,14 +252,17 @@ export async function createUser(db: Db, input: NewUser, now = Date.now()): Prom
   try {
     return await db
       .prepare(
-        `INSERT INTO users (username, display_name, password_hash, role, webhook_token, settings, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING ${COLUMNS}`,
+        `INSERT INTO users (username, display_name, password_hash, role,
+           perm_edit_own, perm_view_presence, perm_view_team, webhook_token, settings, created_at)
+         VALUES (?, ?, ?, CASE WHEN EXISTS (SELECT 1 FROM users) THEN ? ELSE 'owner' END, ?, ?, ?, ?, ?, ?)
+         RETURNING ${COLUMNS}`,
       )
       .bind(
         input.username,
         input.displayName ?? null,
         passwordHash,
         input.role ?? "user",
+        ...PERMISSION_KEYS.map((k) => ((input.permissions?.[k] ?? DEFAULT_PERMISSIONS[k]) ? 1 : 0)),
         generateToken(),
         JSON.stringify(input.settings ?? {}),
         now,
@@ -186,16 +297,16 @@ export async function setPassword(db: Db, userId: number, password: string): Pro
 }
 
 /**
- * SQL condition, true when user `?` is NOT the last active admin. Used in WHERE clauses so the
- * "keep at least one active admin" guard is checked atomically with the write.
+ * SQL condition, true when user `?` is NOT the last active owner. Used in WHERE clauses so the
+ * "keep at least one active owner" guard is checked atomically with the write (demote, disable, delete).
  * Binds two parameters: the user id, twice.
  */
-export const NOT_LAST_ACTIVE_ADMIN = `NOT (
-  (SELECT role = 'admin' AND disabled_at IS NULL FROM users WHERE id = ?)
-  AND (SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled_at IS NULL AND id <> ?) = 0
+export const NOT_LAST_ACTIVE_OWNER = `NOT (
+  (SELECT role = 'owner' AND disabled_at IS NULL FROM users WHERE id = ?)
+  AND (SELECT COUNT(*) FROM users WHERE role = 'owner' AND disabled_at IS NULL AND id <> ?) = 0
 )`;
 
-// --- Brute-force protection (migration 0002) ---
+// --- Brute-force protection ---
 
 /** Consecutive failed password checks that lock the account… */
 export const LOGIN_MAX_FAILURES = 10;

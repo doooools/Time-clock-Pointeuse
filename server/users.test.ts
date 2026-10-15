@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { msg } from "./messages";
-import { applySettingsPatch, instanceDefaults, isValidUsername, passwordProblem, resolveUserSettings } from "./users";
+import type { Role } from "./env";
+import {
+  applySettingsPatch,
+  canAssignRole,
+  canEditData,
+  canManageUser,
+  canViewData,
+  capabilities,
+  instanceDefaults,
+  isValidUsername,
+  parsePermissions,
+  passwordProblem,
+  permissions,
+  permissionsSql,
+  resolveUserSettings,
+} from "./users";
 
 describe("instanceDefaults", () => {
   it("reads and validates the DEFAULT_* variables", () => {
@@ -60,6 +75,70 @@ describe("account validation", () => {
     expect(passwordProblem("1234567")).toBe("passwordTooShort");
     expect(passwordProblem(undefined)).toBe("passwordTooShort");
     expect(passwordProblem("x".repeat(1025))).toBe("passwordTooLong");
+  });
+});
+
+describe("roles and permissions", () => {
+  const row = (id: number, role: Role, perms: [number, number, number] = [1, 0, 0], disabled = false) => ({
+    id,
+    role,
+    perm_edit_own: perms[0],
+    perm_view_presence: perms[1],
+    perm_view_team: perms[2],
+    disabled_at: disabled ? 1 : null,
+  });
+  const owner = row(1, "owner", [0, 0, 0]);
+  const admin = row(2, "admin", [0, 0, 0]);
+  const admin2 = row(3, "admin");
+  const user = row(4, "user");
+  const viewer = row(5, "user", [1, 0, 1]);
+  const locked = row(6, "user", [0, 1, 0]);
+  const gone = row(7, "user", [1, 0, 0], true);
+
+  it("derives capabilities from the role, then the permissions", () => {
+    expect(capabilities(owner)).toEqual({ manageAdmins: true, manageUsers: true, editOthers: true, viewTeam: true, viewPresence: true, editOwn: true });
+    expect(capabilities(admin)).toEqual({ manageAdmins: false, manageUsers: true, editOthers: true, viewTeam: true, viewPresence: true, editOwn: true });
+    expect(capabilities(user)).toEqual({ manageAdmins: false, manageUsers: false, editOthers: false, viewTeam: false, viewPresence: false, editOwn: true });
+    expect(capabilities(locked)).toMatchObject({ editOwn: false, viewPresence: true, viewTeam: false });
+    expect(permissions(viewer)).toEqual({ editOwn: true, viewPresence: false, viewTeam: true });
+  });
+
+  it("decides who manages, edits and reads whom", () => {
+    expect(canManageUser(owner, admin)).toBe(true);
+    expect(canManageUser(owner, owner)).toBe(true);
+    expect(canManageUser(admin, user)).toBe(true);
+    expect(canManageUser(admin, admin2)).toBe(false);
+    expect(canManageUser(admin, owner)).toBe(false);
+    expect(canManageUser(viewer, user)).toBe(false);
+
+    expect(canAssignRole(owner, "owner")).toBe(true);
+    expect(canAssignRole(admin, "user")).toBe(true);
+    expect(canAssignRole(admin, "admin")).toBe(false);
+    expect(canAssignRole(user, "user")).toBe(false);
+
+    expect(canEditData(owner, admin2)).toBe(true);
+    expect(canEditData(admin, user)).toBe(true);
+    expect(canEditData(admin, admin)).toBe(true);
+    expect(canEditData(admin, admin2)).toBe(false);
+    expect(canEditData(viewer, user)).toBe(false);
+    expect(canEditData(viewer, viewer)).toBe(true);
+    expect(canEditData(locked, locked)).toBe(false);
+
+    expect(canViewData(user, user)).toBe(true);
+    expect(canViewData(user, viewer)).toBe(false);
+    expect(canViewData(viewer, owner)).toBe(true);
+    expect(canViewData(viewer, gone)).toBe(false);
+    expect(canViewData(admin, gone)).toBe(true);
+  });
+
+  it("validates permission patches and maps them to columns", () => {
+    expect(parsePermissions({ viewTeam: true, editOwn: false })).toEqual({ viewTeam: true, editOwn: false });
+    expect(parsePermissions({})).toEqual({});
+    for (const bad of [null, [], "x", { viewTeam: 1 }, { admin: true }]) expect(parsePermissions(bad)).toBeNull();
+    expect(permissionsSql({ viewTeam: true, editOwn: false })).toEqual({
+      sets: ["perm_edit_own = ?", "perm_view_team = ?"],
+      values: [0, 1],
+    });
   });
 });
 

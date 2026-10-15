@@ -3,7 +3,7 @@ import { app } from "../server/app";
 import type { Env, Role, UserRow } from "../server/env";
 import { openDatabase } from "../server/node/database";
 import type { SqliteDb } from "../server/db/sqlite";
-import { createUser } from "../server/users";
+import { createUser, type Permissions } from "../server/users";
 import type { Settings } from "../shared/settings";
 
 export const SECRET = "test-secret-test-secret-test-secret-0123456789";
@@ -73,11 +73,14 @@ export const PASSWORD = "correct horse battery";
 
 export type TestUser = { row: UserRow; client: Client };
 
-/** Creates an account directly in the database and returns a client already signed in as that user. */
+/**
+ * Creates an account directly in the database and returns a client already signed in as that user.
+ * The first account of an instance is always an owner (whatever `role` says).
+ */
 export async function addUser(
   env: Env,
   username: string,
-  opts: { role?: Role; settings?: Partial<Settings>; displayName?: string } = {},
+  opts: { role?: Role; settings?: Partial<Settings>; displayName?: string; permissions?: Partial<Permissions> } = {},
 ): Promise<TestUser> {
   const row = await createUser(env.DB, { username, password: PASSWORD, ...opts });
   if (!row) throw new Error(`user ${username} already exists`);
@@ -87,10 +90,10 @@ export async function addUser(
   return { row, client };
 }
 
-/** Instance with an admin (alice) and a plain user (bob), both signed in. */
+/** Instance with an owner (alice, the first account) and a plain user (bob), both signed in. */
 export async function twoAccounts(envOverrides: Omit<Partial<Env>, "DB"> = {}) {
   const env = makeEnv(envOverrides);
-  const alice = await addUser(env, "alice", { role: "admin" });
+  const alice = await addUser(env, "alice", { role: "owner" });
   const bob = await addUser(env, "bob");
   return { env, alice, bob };
 }

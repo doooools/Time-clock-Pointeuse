@@ -20,7 +20,7 @@ export async function loadMarks(db: Db, userId: number): Promise<DayMark[]> {
   return results;
 }
 
-/** Payload of `GET /api/data` (and `GET /api/admin/users/:id/data`). Computation happens client side. */
+/** Payload of `GET /api/data` (and `GET /api/team/:id/data`). Computation happens client side. */
 export async function userDataPayload(env: Env, user: UserRow) {
   const [punches, marks] = await Promise.all([loadPunches(env.DB, user.id), loadMarks(env.DB, user.id)]);
   return {

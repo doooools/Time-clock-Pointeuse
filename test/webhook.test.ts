@@ -100,7 +100,7 @@ describe("webhook", () => {
     expect((await alice.client.patch(`/api/admin/users/${bob.row.id}`, { disabled: true })).status).toBe(200);
     const res = await anon.get(`/api/webhook/punch?token=${bob.row.webhook_token}`);
     expect(res.status).toBe(401);
-    expect((await alice.client.get(`/api/admin/users/${bob.row.id}/data`)).body.punches).toEqual([]);
+    expect((await alice.client.get(`/api/team/${bob.row.id}/data`)).body.punches).toEqual([]);
     await alice.client.patch(`/api/admin/users/${bob.row.id}`, { disabled: false });
     expect((await anon.get(`/api/webhook/punch?token=${bob.row.webhook_token}`)).status).toBe(200);
   });

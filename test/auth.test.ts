@@ -25,7 +25,21 @@ describe("auth", () => {
     expect(me.body).toMatchObject({
       authenticated: true,
       locale: "fr",
-      user: { username: "Alice", displayName: "Alice A.", role: "user" },
+      // The first account of an instance is the owner.
+      user: {
+        username: "Alice",
+        displayName: "Alice A.",
+        role: "owner",
+        permissions: { editOwn: true, viewPresence: false, viewTeam: false },
+        capabilities: {
+          manageAdmins: true,
+          manageUsers: true,
+          editOthers: true,
+          viewTeam: true,
+          viewPresence: true,
+          editOwn: true,
+        },
+      },
     });
     expect(me.body.user).not.toHaveProperty("password_hash");
   });
@@ -170,11 +184,14 @@ describe("routing", () => {
     const anon = new Client(env);
     // Unknown routes are behind the session guard: 401 anonymous, 404 once signed in.
     expect((await anon.get("/api/nope")).status).toBe(401);
-    const { client } = await addUser(env, "alice");
+    const owner = await addUser(env, "alice");
+    const { client } = await addUser(env, "bob");
     const res = await client.get("/api/nope");
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "Not found." });
+    // The admin API checks the capability first: 403 for a plain user, 404 for an account manager.
     expect((await client.get("/api/admin/nope")).status).toBe(403);
+    expect((await owner.client.get("/api/admin/nope")).status).toBe(404);
     expect(ASSETS).toBeDefined();
   });
 });
