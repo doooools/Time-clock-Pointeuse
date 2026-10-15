@@ -27,8 +27,9 @@ server/                Hono API, runtime independent (only Web APIs + the `Db` i
   env.ts               Env (bindings + DEFAULT_*), UserRow, AppEnv
   db/types.ts          `Db` / `DbStatement` (subset of D1) — the ONLY database API server code may use
   db/sqlite.ts         Db implementation on node:sqlite (Node only)
-  auth.ts session.ts   login/logout/me, signed cookie, requireSession, requireAdmin
-  users.ts             account queries, validation, settings layering (reused by the CLI)
+  auth.ts session.ts   login/logout/me, signed cookie, login lockout (429), requireSession, requireAdmin
+  security.ts          csrfGuard (JSON bodies + Sec-Fetch-Site), apiBodyLimit (1 MiB), securityHeaders, FRONT_CSP
+  users.ts             account queries, validation, settings layering, lockout counters (reused by the CLI)
   data.ts              loadPunches / loadMarks / userDataPayload (always by user id)
   routes/api.ts        signed-in user's data: punches, marks, settings, password, webhook token
   routes/webhook.ts    GET|POST /api/webhook/punch (token identifies the user)
@@ -39,7 +40,7 @@ server/                Hono API, runtime independent (only Web APIs + the `Db` i
   entry/cloudflare.ts  Workers entry (`wrangler.jsonc` main)
   entry/node.ts        Node entry: .env, SQLite, migrations, static front, @hono/node-server
   node/                Node helpers: assets.ts (static shim), database.ts (openDatabase), build.ts (esbuild)
-migrations/            0001_init.sql… — SQL portable D1 + SQLite ≥ 3.35, applied by wrangler AND migrate.ts
+migrations/            0001_init.sql, 0002_login_throttle.sql… — portable D1 + SQLite ≥ 3.35, applied by wrangler AND migrate.ts
 src/                   React front end
   App.tsx main.tsx     routes (/, /history, /stats, /data, /settings), shell, session check
   pages/               Dashboard, History, Stats (lazy, ECharts), DataPage, Settings, Login
@@ -47,7 +48,8 @@ src/                   React front end
   lib/                 api.ts (typed fetch client), store.tsx (data + mutations), dates.ts, export.ts…
   i18n/                index.tsx (I18nProvider, useT, useLocale) + locales/{fr,en}/<namespace>.ts
   index.css            design tokens (@theme) + utilities — the whole look lives here
-scripts/               accounts CLI (`npm run user`), see docs/users.md
+public/                icon, manifest, _headers (front-end security headers on Cloudflare = FRONT_CSP)
+scripts/               accounts CLI (`npm run user`, entry scripts/user.ts, commands in scripts/cli/), see docs/users.md
 test/                  API integration tests: real app on in-memory SQLite (helpers.ts)
 Dockerfile docker-compose.yml .env.example   Node/Docker deployment
 wrangler.jsonc .dev.vars.example             Cloudflare deployment / local dev secrets
@@ -68,11 +70,13 @@ wrangler.jsonc .dev.vars.example             Cloudflare deployment / local dev s
 | `npm start` | `node dist/server/index.mjs` (reads `.env`, migrates, serves on `PORT`) |
 | `npm run user -- <cmd>` | accounts CLI (dev, via tsx); built: `node dist/server/cli.mjs <cmd>` |
 
-CLI targets: `--db <file>` (SQLite; default `$DATABASE_PATH`, from the environment or `./.env`; no target →
-error), `--d1-local`, `--d1-remote`. Commands: `add <name>
-[--admin] [--name "…"] [--locale] [--timezone] [--holidays] [--generate-password|--password-stdin]`, `list`,
-`passwd`, `token [--regenerate]`, `role <name> admin|user`, `disable`, `enable`, `remove [--yes]`,
-`import <name> <file> [--date-order dmy|mdy]`. Full reference: `docs/users.md`.
+CLI target, by priority: `--db <file>` | `--d1-local` | `--d1-remote` > `$DATABASE_PATH` (environment, or `./.env`,
+which the CLI loads; set in `.env.example` and in the Docker image) > `./data/opointeuse.db` if it exists > error.
+SQLite targets are created and migrated; D1 needs `npm run db:migrate:local|remote` first. Commands: `add <name>
+[--admin] [--name "…"] [--locale] [--timezone] [--holidays] [--generate-password|--password-stdin]`, `list [--json]`,
+`passwd`, `token [--regenerate]`, `role <name> admin|user`, `disable`, `enable`, `unlock`, `remove [--yes]`,
+`import <name> <file|-> [--date-order dmy|mdy] [--dry-run]`, `seed-demo <name> [--months 3] [--seed 42] [--yes]`
+(synthetic demo data). Full reference: `docs/users.md`.
 
 Targeted checks while others work on the tree: `npx vitest run <dir>`, `npx tsc -p tsconfig.<app|worker|node>.json --noEmit`.
 
@@ -95,12 +99,17 @@ Targeted checks while others work on the tree: `npx vitest run <dir>`, `npx tsc 
    `msg(locale, key)` with keys in `server/messages.ts` (EN + FR). Both languages, always.
 6. **No native dependency** (no `better-sqlite3`, no `sharp` at runtime): Node uses built-in `node:sqlite`,
    Workers cannot load native code. New npm dependencies need a real reason.
-7. **Settings go through `sanitizeSettings`** (never trust stored JSON or input) and are resolved as
+7. **Keep the security middleware in front of every route** (`server/app.ts`: `securityHeaders`, `csrfGuard`,
+   `apiBodyLimit`). Mutations are never `GET`; request bodies are JSON (`415` otherwise). The front end loads no
+   third-party script: a new external origin (font, CDN, analytics) must be added to `FRONT_CSP` in
+   `server/security.ts` **and** to `public/_headers` (Cloudflare), kept identical (`test/security.test.ts`).
+   Password checks go through the lockout (`reserveLoginAttempt` / `clearLoginFailures` in `server/users.ts`).
+8. **Settings go through `sanitizeSettings`** (never trust stored JSON or input) and are resolved as
    `resolveSettings(instanceDefaults(env), storedSettings(user))`.
-8. **Migrations are append-only**: never edit an applied `migrations/NNNN_*.sql`, add the next number.
-9. **Tests stay green**: `npm test`, `npm run typecheck`, `npm run build`, `npm run build:node` (CI runs all four
+9. **Migrations are append-only**: never edit an applied `migrations/NNNN_*.sql`, add the next number.
+10. **Tests stay green**: `npm test`, `npm run typecheck`, `npm run build`, `npm run build:node` (CI runs all four
    on Node 22 and 24, plus `docker build`).
-10. **No personal data** in the repo: no real punches, tokens, account ids, `database_id`, personal URLs.
+11. **No personal data** in the repo: no real punches, tokens, account ids, `database_id`, personal URLs.
 
 ## Conventions
 
@@ -119,24 +128,34 @@ Targeted checks while others work on the tree: `npx vitest run <dir>`, `npx tsc 
   `wrangler.jsonc` `database_id` → `npm run db:migrate:remote` → `npx wrangler secret put SESSION_SECRET`
   (≥ 32 chars, e.g. `openssl rand -hex 32`) → optional `vars` `DEFAULT_*` in `wrangler.jsonc` →
   `npm run deploy` → `npm run user -- add <name> --admin --d1-remote --generate-password`.
-- **Node**: `npm ci` → `npm run build:node` → `cp .env.example .env`, set `SESSION_SECRET`, uncomment
-  `DATABASE_PATH=./data/opointeuse.db` (the CLI needs it, or pass `--db <file>`), + `DEFAULT_*`, `PORT` →
-  `npm start` (creates and migrates the DB) → `npm run user -- add <name> --admin --generate-password` (reads
-  `.env` from the current folder). Behind a TLS proxy, forward `X-Forwarded-Proto` so the session cookie gets
-  `Secure`. One Node process per SQLite file.
-- **Docker**: create `.env` with `SESSION_SECRET` (+ `DEFAULT_*`, uncomment them in `docker-compose.yml`
-  `environment`) → `docker compose up -d --build` → `docker compose exec opointeuse node dist/server/cli.mjs add
-  <name> --admin --generate-password` (DB at `/data/opointeuse.db`, named volume `opointeuse-data`).
+- **Node**: `npm ci` → `npm run build:node` → `cp .env.example .env`, set `SESSION_SECRET` (+ `DEFAULT_*`,
+  `PORT`; `DATABASE_PATH=./data/opointeuse.db` is already set) → `npm run user -- add <name> --admin
+  --generate-password` (reads `.env`, creates and migrates the DB) → `npm start`. Behind a TLS proxy, forward
+  `X-Forwarded-Proto` so the session cookie gets `Secure`, and add HSTS there. One Node process per SQLite file.
+- **Docker**: create `.env` with `SESSION_SECRET` → set `DEFAULT_*` by uncommenting them under `environment:` in
+  `docker-compose.yml` (values only in `.env` are not passed to the container) → `docker compose up -d --build` →
+  `docker compose exec opointeuse node dist/server/cli.mjs add <name> --admin --generate-password` (DB at
+  `/data/opointeuse.db`, named volume `opointeuse-data`).
+- Team: one `add <name> --name "Full Name" --generate-password` per person (same prefix / target flag), credentials
+  handed out privately; per-person rules without a CLI flag (workdays, other daily target) via the Settings page or
+  admin `PATCH /api/admin/users/:id { "settings": { … } }`.
 - Check: `curl <url>/api/me` → `{"authenticated":false,"defaultLocale":…}`.
+- Demo data: `npm run user -- add demo --generate-password` then `npm run user -- seed-demo demo` (same target flag).
+- Internet-facing instance: HTTPS + HSTS at the proxy (or Cloudflare dashboard), per-IP rate limit on `/api/login`
+  at the proxy / a Cloudflare rate-limiting rule (the app only locks per account), webhook token in a header.
+  Details: `docs/deploy-*.md`, `docs/configuration.md` (security).
 - Instance defaults: `DEFAULT_LOCALE` (en|fr), `DEFAULT_TIMEZONE` (IANA), `DEFAULT_HOLIDAYS` (region code or
   none), `DEFAULT_DAILY_TARGET_MIN`. Other settings (workdays…) are per account (CLI flags, Settings page,
   admin API `settings`). Weekly hours → daily target: `hours × 60 / workdays` (38 h / 5 days = 456).
 
 ### Accounts
 No sign-up, no admin page. First admin with the CLI (above). Then `npm run user -- list|add|passwd|role|disable|
-enable|remove|token`. An admin can also use the admin API (`/api/admin/users`, see `docs/api.md`). The last
-active admin cannot be removed, disabled or demoted. Each account has its own webhook token
-(`token <name> [--regenerate]`, or Settings page) → URL `<origin>/api/webhook/punch?token=<token>`.
+enable|unlock|remove|token`. An admin can also use the admin API (`/api/admin/users`, see `docs/api.md`). The last
+active admin cannot be removed, disabled or demoted. 10 wrong passwords lock an account's login for 15 min (429 +
+`Retry-After`; sessions and webhook unaffected): `unlock <name>`, `passwd`, or admin `PATCH … { "unlock": true }`.
+Each account has its own webhook token (`token <name> [--regenerate]`, or Settings page) → `POST
+<origin>/api/webhook/punch` with `X-Webhook-Token: <token>` (or `Authorization: Bearer`; `?token=` works but ends
+up in logs).
 
 ### Add a public-holiday region
 `shared/holidays/<code>.ts` exporting `region: HolidayRegion` (`code` upper case, names in the local language,
@@ -169,13 +188,17 @@ In `server/routes/api.ts` (signed-in user) or `admin.ts` (admin): `readBody(c)`,
 `c.get("user").id` in the `WHERE`, `fail(c, 4xx, "messageKey")` with the key added to both languages of
 `server/messages.ts`. Client: method in `src/lib/api.ts`, mutation in `src/lib/store.tsx` if it changes data.
 Test in `test/<area>.test.ts`: `const env = makeEnv(); const a = await addUser(env, "a"); await a.client.post(…)`
-— include an isolation case (account B gets 404 on A's object).
+(the `Client` sends JSON) — include an isolation case (account B gets 404 on A's object). The route is covered by
+the CSRF guard, body limit and headers automatically; a route that must accept non-JSON or cross-site calls (like
+the webhook) needs an explicit exemption in `server/security.ts`.
 
 ### Build an admin page (API exists, UI does not)
-Endpoints (role admin, cookie session): `GET /api/admin/users`, `POST /api/admin/users` `{ username, password,
-displayName?, role?, settings? }` → `{ user, webhookToken }`, `PATCH /api/admin/users/:id` `{ displayName?, role?,
-disabled?, password?, settings? }`, `POST /api/admin/users/:id/webhook-token`, `DELETE /api/admin/users/:id`,
+Endpoints (role admin, cookie session): `GET /api/admin/users` (each user: `id, username, displayName, role,
+disabled, createdAt, locked, lockedUntil`), `POST /api/admin/users` `{ username, password, displayName?, role?,
+settings? }` → `{ user, webhookToken }`, `PATCH /api/admin/users/:id` `{ displayName?, role?, disabled?, password?,
+settings?, unlock? }`, `POST /api/admin/users/:id/webhook-token`, `DELETE /api/admin/users/:id`,
 `GET /api/admin/users/:id/data` (same payload as `/api/data`). 409 = last admin guard or duplicate username.
+Calls go through `request()` in `src/lib/api.ts`, which already sends JSON (the CSRF guard needs it).
 Wiring: add client methods to `src/lib/api.ts`; create `src/pages/Admin.tsx`; add `<Route path="/admin">` and
 a `NAV` entry in `src/App.tsx` **only when `user.role === "admin"`** (`useStore().user`); new i18n namespace
 `admin` in `src/i18n/locales/{fr,en}/admin.ts` + both `index.ts`. The server already enforces the role (403),
@@ -190,7 +213,7 @@ change applies retroactively to all history.
 
 ### Re-skin
 Tokens in the `@theme` block of `src/index.css` (colors `--color-*`, fonts `--font-*`, shadows); fonts are
-loaded in `index.html`. Charts read the same tokens (`src/components/charts/Chart.tsx`, `PK`). Brand text:
+loaded in `index.html` (Google Fonts; another font host must be allowed in `FRONT_CSP` and `public/_headers`). Charts read the same tokens (`src/components/charts/Chart.tsx`, `PK`). Brand text:
 `common.brand` in i18n; app name/icon: `index.html`, `public/manifest.webmanifest`, `public/icon.svg`.
 
 ### Add a migration

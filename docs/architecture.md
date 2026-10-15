@@ -62,7 +62,7 @@ types, `server` + `shared`, Node files excluded), `tsconfig.node.json` (Node typ
 
 ## Data model
 
-`migrations/0001_init.sql` — portable between D1 and SQLite ≥ 3.35.
+`migrations/0001_init.sql` + `0002_login_throttle.sql` — portable between D1 and SQLite ≥ 3.35.
 
 ```mermaid
 erDiagram
@@ -79,6 +79,8 @@ erDiagram
     INTEGER session_version "bumped to revoke sessions"
     INTEGER created_at "epoch ms"
     INTEGER disabled_at "NULL = active"
+    INTEGER failed_logins "consecutive wrong passwords (0002)"
+    INTEGER locked_until "epoch ms, NULL = not locked (0002)"
   }
   punches {
     INTEGER id PK
@@ -181,6 +183,13 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
   iterations (the Workers maximum), random salt, `verifyPassword` in constant time (`server/passwords.ts`).
 - **Login** (`POST /api/login`): username case-insensitive. Failures (wrong password, unknown or disabled user)
   return the same 401 after ~800 ms, and an unknown user still runs a PBKDF2 check (no user enumeration by timing).
+- **Lockout** (migration 0002, `server/users.ts`): before each password check of an existing account (login and
+  `POST /api/me/password`), `reserveLoginAttempt` counts the attempt atomically in SQL, so parallel requests cannot
+  exceed `LOGIN_MAX_FAILURES` (10) per period; the 10th failure sets `locked_until = now + 15 min`. While locked, the
+  password is not even checked: 429 with `Retry-After`, message in the instance language. A correct password calls
+  `clearLoginFailures`. The lock is also lifted by a new password (`setPassword`), the admin API (`unlock: true`)
+  and the CLI (`unlock`, `enable`, `passwd`). Unknown usernames are never locked; sessions and the webhook are never
+  affected.
 - **Session cookie** `opointeuse_session` = `<userId>.<sessionVersion>.<exp>.<HMAC-SHA256>` signed with
   `SESSION_SECRET` (≥ 32 chars), httpOnly, `SameSite=Lax`, `Secure` over HTTPS, 90 days. `requireSession`
   verifies the signature and expiry, **reloads the user** and rejects a disabled account or a different
@@ -193,6 +202,22 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
   user; no cookie. Regenerating it invalidates the old one.
 - Behind a TLS reverse proxy on Node, `entry/node.ts` honours `X-Forwarded-Proto: https` so the cookie keeps
   `Secure`.
+
+## HTTP security (`server/security.ts`)
+
+Mounted in `server/app.ts`, identical on every runtime:
+
+- `securityHeaders` (every response): `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`,
+  `Permissions-Policy`, `Cross-Origin-Opener-Policy`; `/api/*` adds `Cache-Control: no-store` and
+  `CSP: default-src 'none'`; front-end files served through `ASSETS` (Node) get `FRONT_CSP` (own scripts only, Google
+  Fonts, inline styles for React/ECharts). On Cloudflare the static files bypass the worker
+  (`run_worker_first: ["/api/*"]`), so `public/_headers` carries the same front-end headers; a test keeps both equal.
+- `csrfGuard` (`/api/*` except the webhook, non-GET): refuses a browser request whose `Sec-Fetch-Site` is not
+  `same-origin`/`none` (403), and any body that is not `application/json` (415). Together with `SameSite=Lax` this
+  blocks form posts and cross-origin `fetch` (which would need a CORS preflight; the app never answers CORS).
+- `apiBodyLimit`: 1 MiB per request on `/api/*` (413), streamed bodies included.
+- Not in the app, by design: HSTS (instances may run over plain HTTP on a LAN) and per-IP rate limiting (needs shared
+  storage); both belong to the TLS proxy or Cloudflare.
 
 ## Internationalisation
 
@@ -212,8 +237,8 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
 
 | Target | Build | Runs | Database | Static files |
 |---|---|---|---|---|
-| Cloudflare Workers | `npm run build` (Vite + `@cloudflare/vite-plugin`) | `wrangler deploy`, entry `server/entry/cloudflare.ts` | D1 `opointeuse` (`wrangler.jsonc`) | Workers assets (`dist/client`, SPA fallback, `/api/*` to the worker first) |
-| Node | `npm run build:node` = `vite build --mode node` (no Cloudflare plugin) + esbuild bundle | `node dist/server/index.mjs` | SQLite file `DATABASE_PATH` (WAL, foreign keys on) | `server/node/assets.ts` (SPA fallback, ETag, 1-year cache on `/assets/*`) |
+| Cloudflare Workers | `npm run build` (Vite + `@cloudflare/vite-plugin`) | `wrangler deploy`, entry `server/entry/cloudflare.ts` | D1 `opointeuse` (`wrangler.jsonc`) | Workers assets (`dist/client`, SPA fallback, `/api/*` to the worker first), headers from `public/_headers` |
+| Node | `npm run build:node` = `vite build --mode node` (no Cloudflare plugin) + esbuild bundle | `node dist/server/index.mjs` | SQLite file `DATABASE_PATH` (WAL, foreign keys on) | `server/node/assets.ts` (SPA fallback, ETag, 1-year cache on `/assets/*`), headers from `securityHeaders` |
 | Docker | same as Node, in a `node:24-slim` build stage | `node:24-alpine`, non-root, `dist/` only | `/data/opointeuse.db` (volume) | same as Node |
 | Dev | `npm run dev` (Vite + workerd) | local | local D1 (`.wrangler/`) | Vite |
 
@@ -231,10 +256,18 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
 - **Webhook tokens stored in clear.** They are shown on the Settings page so the user can configure a phone,
   and they are 256-bit random values looked up by index. A database leak exposes them: regenerate tokens after
   an incident. Passwords are hashed.
-- **CSRF protection = `SameSite=Lax` + JSON bodies.** No CSRF token and no Origin check (which breaks behind
-  proxies rewriting `Host`). Mutations are never GET (except the webhook, which uses its own token).
-- **No login rate limit** beyond the 800 ms delay; put a reverse proxy or Cloudflare rules in front for public
-  instances.
+- **CSRF protection = `SameSite=Lax` + `Sec-Fetch-Site` + JSON-only bodies**, no CSRF token and no Origin/Host
+  comparison (which breaks behind proxies rewriting `Host`). Clients without `Sec-Fetch-Site` (curl, scripts, very old
+  browsers) are accepted: they cannot be driven by a malicious page anyway. Mutations are never GET (except the
+  webhook, which has its own token and no cookie).
+- **Per-account lockout, no per-IP limit.** 10 wrong passwords lock an account's password checks for 15 minutes.
+  Trade-off: the 429 reveals that a username exists, and someone who knows it can keep its web login locked
+  (sessions, the webhook and admin unlock still work). Per-IP limiting is left to the reverse proxy or a Cloudflare
+  rate-limiting rule.
+- **Logout only deletes the cookie.** A stolen cookie stays valid until it expires or the password changes (which
+  revokes all sessions through `session_version`). A per-device session table would be needed for finer control.
+- **Webhook token accepted in the query string** for the simplest clients (NFC/Tasker, badge readers), although
+  headers are recommended: URLs end up in logs.
 - **`node:sqlite`, no native module.** Same code path everywhere, trivial Docker image. One Node process per
   database file (no multi-instance locking beyond `busy_timeout`).
 - **Settings as JSON per account** rather than columns: adding a setting needs no migration; validation lives in

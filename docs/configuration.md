@@ -17,7 +17,7 @@ Two levels of configuration:
 | `DEFAULT_DAILY_TARGET_MIN` | no | `420` | all | Daily target in minutes (`420` = 7h00, `438` = 7h18). Between 0 and 1440. |
 | `PORT` | no | `3000` | Node, Docker | TCP port to listen on. |
 | `HOST` | no | `0.0.0.0` | Node, Docker | Address to bind. Use `127.0.0.1` behind a reverse proxy on the same machine. |
-| `DATABASE_PATH` | no | `./data/opointeuse.db` | Node, Docker | SQLite file. Its folder is created if needed. In Docker it is `/data/opointeuse.db`. |
+| `DATABASE_PATH` | no | `./data/opointeuse.db` | Node, Docker, CLI | SQLite file. Its folder is created if needed and migrations run at startup. Set in `.env.example`; in Docker it is `/data/opointeuse.db`. The accounts CLI uses it too (then `./data/opointeuse.db` if that file exists). |
 
 Invalid `DEFAULT_*` values are silently ignored (the built-in default applies).
 
@@ -29,6 +29,42 @@ Where to put them:
 | Docker | `.env` next to `docker-compose.yml` (read by Compose) and the `environment:` section of the compose file. |
 | Cloudflare (production) | `SESSION_SECRET`: `npx wrangler secret put SESSION_SECRET`. `DEFAULT_*`: the `vars` block of `wrangler.jsonc`. |
 | Cloudflare (local dev) | `.dev.vars` (copy [`.dev.vars.example`](../.dev.vars.example)). |
+
+## Security settings and limits
+
+These are fixed in the code (`server/security.ts`, `server/users.ts`, `server/session.ts`), not configurable by
+environment variables.
+
+| What | Value |
+|---|---|
+| Session cookie | `opointeuse_session`, HttpOnly, SameSite=Lax, Secure over HTTPS, 90 days |
+| Login lockout | 10 consecutive wrong passwords lock the account's password checks for 15 min (`429` + `Retry-After`); sessions and the webhook keep working |
+| Failed login delay | about 800 ms per failure |
+| API request body | 1 MiB at most (`413`); must be JSON (`415`) |
+| Cross-site requests | refused when the browser's `Sec-Fetch-Site` is not `same-origin` (`403`); webhook exempt |
+| Passwords | 8 to 1024 characters, PBKDF2-SHA256 with 100 000 iterations |
+
+### Security headers
+
+Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`,
+`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()` and
+`Cross-Origin-Opener-Policy: same-origin`.
+
+- **API** (`/api/*`): `Cache-Control: no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
+- **Front end**: a Content-Security-Policy allowing only the app's own scripts, the Google Fonts stylesheet and
+  fonts, and inline styles. On Node and Docker the app adds it (`FRONT_CSP` in `server/security.ts`); on
+  Cloudflare, static files are served without the worker, so the same headers come from
+  [`public/_headers`](../public/_headers). If you change one, change the other (`test/security.test.ts` checks
+  that they match). In `npm run dev` there is no front-end CSP (Vite's hot reload needs inline scripts).
+- **Not set by the app**: `Strict-Transport-Security` (HSTS), because an instance may run over plain HTTP on a
+  local network. Add it at your HTTPS reverse proxy, or enable it in the Cloudflare dashboard (SSL/TLS → Edge
+  Certificates → HSTS).
+- **Per-IP rate limiting** is not built in (it needs shared storage). For an instance exposed on the Internet, add it
+  in front: a Cloudflare *Rate limiting rule* on `/api/login`, or `limit_req` (nginx), a rate-limit module (Caddy) or
+  fail2ban on Node/Docker. See the deployment guides.
+
+Changing `SESSION_SECRET` signs every user out at once (emergency procedure after a leak). A leaked webhook token is
+replaced from the Settings page, `POST /api/me/webhook-token` or `npm run user -- token <username> --regenerate`.
 
 ## Account settings
 

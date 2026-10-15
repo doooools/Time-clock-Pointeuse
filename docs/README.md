@@ -24,16 +24,18 @@ start.
 
 | Document | Contents |
 |---|---|
-| [../CLAUDE.md](../CLAUDE.md) | Entry point for Claude Code (and other AI assistants): project map, conventions, commands |
-| [architecture.md](architecture.md) | How the code is organised: shared engine, server, front end, runtimes |
-| [customization.md](customization.md) | Changing colours and texts, adding a language or a holiday region, adapting the rules |
+| [../CLAUDE.md](../CLAUDE.md) | Entry point for Claude Code (and other AI assistants, via [../AGENTS.md](../AGENTS.md)): project map, commands, invariants, recipes |
+| [../.claude/skills/setup/SKILL.md](../.claude/skills/setup/SKILL.md) | Guided installation skill for Claude Code (questions, then the steps for each target) |
+| [architecture.md](architecture.md) | How it works: data flow, data model, calculation rules, sessions and security, build targets, design decisions |
+| [customization.md](customization.md) | Settings vs code, adding a holiday region, a setting, a language, an API route or an admin page, adapting the rules, changing the look or the schema |
 | [../shared/holidays/README.md](../shared/holidays/README.md) | Holiday regions and how to add one |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Contributing: setup, tests, conventions |
 | [../SECURITY.md](../SECURITY.md) | Reporting a vulnerability |
 
 ## Which guide do I need?
 
-- *"I want to try it on my computer."* → [deploy-node.md](deploy-node.md) (or [deploy-docker.md](deploy-docker.md)).
+- *"I want to try it on my computer."* → [deploy-node.md](deploy-node.md) (or [deploy-docker.md](deploy-docker.md)),
+  then `seed-demo` ([users.md](users.md#seed-demo-username-options)) for demo data.
 - *"I want it online for free."* → [deploy-cloudflare.md](deploy-cloudflare.md).
 - *"My team needs accounts."* → [users.md](users.md).
 - *"How do I punch with my phone?"* → [integrations/](integrations/README.md).

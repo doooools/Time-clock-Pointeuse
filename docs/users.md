@@ -129,6 +129,27 @@ npm run user -- import alice history.txt
 
 The Data page of the app does the same for the signed-in user, which is handier for small amounts.
 
+### `seed-demo <username> [options]`
+
+Fills an account with **synthetic** demo data, to try the app or take screenshots: punches on the account's working
+days for the last months up to yesterday (public holidays skipped), in its time zone, with arrivals between 08:00
+and 09:30, a lunch break, and worked time around the daily target; plus one week of leave, a sick day, a half day of
+comp time, two missing exits and one double tap, so the balance and the warnings are not trivial.
+
+| Option | Meaning |
+|---|---|
+| `--months <n>` | How many months back, 1 to 24 (default 3). |
+| `--seed <n>` | Random seed (default 42): the same seed gives the same data. |
+| `--yes` | Allowed when the account already has punches: only days without any punch are filled. Without it the command refuses. |
+
+```bash
+npm run user -- add demo --generate-password
+npm run user -- seed-demo demo --months 6
+```
+
+Use a dedicated account: the data is fake (source `import`). Delete it with `remove demo --yes`. Works on every target
+(SQLite, `--d1-local`, `--d1-remote`).
+
 ## Typical set-ups
 
 **One person, Node or Docker**: create one admin, `add me --admin --generate-password`, done.
@@ -149,5 +170,9 @@ app.
 ```bash
 npm run db:migrate:local
 npm run user -- add demo --admin --d1-local --generate-password
+npm run user -- seed-demo demo --d1-local
 npm run dev        # sign in as demo
 ```
+
+With the Node server instead: `npm run user -- add demo --admin --generate-password`, then
+`npm run user -- seed-demo demo`, then `npm start`.

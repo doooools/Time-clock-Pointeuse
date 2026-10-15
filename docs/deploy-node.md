@@ -31,15 +31,28 @@ openssl rand -hex 32          # copy the output into SESSION_SECRET=
 
 The server reads `.env` from the current directory at startup; variables already present in the environment win. All
 variables are listed in [configuration.md](configuration.md#environment-variables): `PORT` (default 3000), `HOST`
-(default `0.0.0.0`), `DATABASE_PATH` (default `./data/opointeuse.db`) and the optional `DEFAULT_*` instance defaults.
+(default `0.0.0.0`), `DATABASE_PATH` (`./data/opointeuse.db` in `.env.example`) and the optional `DEFAULT_*`
+instance defaults.
 
 ## 3. Create the first admin
 
 ```bash
-npm run user -- add alice --admin --generate-password --db ./data/opointeuse.db
+npm run user -- add alice --admin --generate-password
 ```
 
-It prints the password and the webhook token once. See [users.md](users.md).
+It prints the password and the webhook token once. The CLI reads `.env` from the current directory and uses
+`DATABASE_PATH` (it creates and migrates the file if needed); `--db <file>` overrides it. With only `dist/` on the
+server, use the bundled copy: `node dist/server/cli.mjs add alice --admin --generate-password`. See
+[users.md](users.md).
+
+**Just trying it out?** Add a demo account filled with three months of realistic synthetic punches:
+
+```bash
+npm run user -- add demo --generate-password
+npm run user -- seed-demo demo
+```
+
+Remove it later with `npm run user -- remove demo --yes`.
 
 ## 4. Start
 
@@ -109,6 +122,7 @@ compression):
 ```caddyfile
 time.example.com {
     encode zstd gzip
+    header Strict-Transport-Security "max-age=31536000"
     reverse_proxy 127.0.0.1:3000
 }
 ```
@@ -124,21 +138,42 @@ server {
 
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    # Optional: per-IP rate limit on logins (zone defined below, in the http block)
+    location = /api/login {
+        limit_req zone=opointeuse_login burst=10 nodelay;
+        proxy_pass http://127.0.0.1:3000;
     }
 }
+# In the http { } block (e.g. /etc/nginx/conf.d/opointeuse-limits.conf):
+limit_req_zone $binary_remote_addr zone=opointeuse_login:10m rate=20r/m;
+
 server {
     listen 80;
     server_name time.example.com;
     return 301 https://$host$request_uri;
 }
 ```
+
+### Security notes
+
+- The app sends its own security headers (CSP, `X-Frame-Options`, `no-store` on the API…; see
+  [configuration.md](configuration.md#security-headers)) but **not HSTS**: add it at the proxy as above, once HTTPS
+  works.
+- An account's web login is locked for 15 minutes after 10 wrong passwords. Per-IP rate limiting has to be done in
+  front: `limit_req` in nginx (above), the third-party `caddy-ratelimit` module for Caddy, or fail2ban watching the
+  proxy logs for `POST /api/login` answering 401.
+- Proxy access logs record full URLs: configure phones and readers with the webhook token in a header rather than in
+  `?token=` ([integrations/](integrations/README.md)).
 
 ## 7. Back up
 
@@ -186,3 +221,6 @@ New migrations are applied automatically at startup. Back up before a major upda
 | Only `/api` works, no web page | The front end is not built: run `npm run build:node`; the server looks for `dist/client` next to the bundle, then in the current directory. |
 | Login works but you are signed out on every request behind a proxy | Check the proxy sends `X-Forwarded-Proto` and that you use the HTTPS URL. |
 | `node:sqlite` not found | Node is older than 22.13. |
+| Login answers 429 "Too many failed attempts" | Locked for 15 min after 10 wrong passwords. Wait, or `npm run user -- unlock <username>`. |
+| A script's API call answers 415 | Add `-H 'Content-Type: application/json'` to requests with a body. |
+| The CLI says "No database selected" | Run it from the folder that holds `.env` (with `DATABASE_PATH`), or pass `--db <file>`. |

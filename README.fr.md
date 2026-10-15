@@ -30,6 +30,8 @@ l'application web affiche votre solde d'heures en temps réel.** Elle est pensé
   Angleterre et Pays de Galles, États-Unis, Espagne, Italie, Pays-Bas, Portugal), ou aucun. N'importe quel **fuseau
   horaire** IANA.
 - **Règles configurables** : objectif quotidien, jours ouvrés, pointages un jour de repos, solde et date de départ.
+- **Sécurisée par défaut** : mots de passe PBKDF2, cookies de session signés, verrouillage du compte après des échecs
+  de connexion, protection CSRF, Content-Security-Policy stricte, aucun script tiers.
 
 ### Règles de calcul en bref
 
@@ -53,7 +55,7 @@ git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
 npm ci
 npm run build:node
 cp .env.example .env            # puis renseignez SESSION_SECRET dans .env
-npm run user -- add alice --admin --generate-password --db ./data/opointeuse.db
+npm run user -- add alice --admin --generate-password
 npm start                       # http://localhost:3000
 ```
 
@@ -93,11 +95,26 @@ Suite : [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
    [docs/integrations/](docs/integrations/README.md).
 3. Importez éventuellement votre historique depuis la page **Données**.
 
+### Essayer avec des données de démo
+
+Envie de voir l'application remplie avant de pointer pour de vrai ? Créez un compte à part et remplissez-le avec trois
+mois de pointages fictifs, des congés et quelques anomalies :
+
+```bash
+npm run user -- add demo --generate-password    # Docker : docker compose exec opointeuse node dist/server/cli.mjs …
+npm run user -- seed-demo demo                  # Cloudflare : ajoutez --d1-remote aux deux commandes
+```
+
+Connectez-vous en tant que `demo`, puis supprimez-le plus tard avec `npm run user -- remove demo --yes`. Détails :
+[docs/users.md](docs/users.md).
+
 ## Avec Claude Code
 
 Inutile de suivre les guides à la main. Donnez le lien du dépôt à [Claude Code](https://claude.com/claude-code) avec
-vos besoins, et laissez-le faire l'installation et les modifications. Le dépôt contient un `CLAUDE.md` et un skill de
-mise en place pour qu'il comprenne le projet tout de suite. Exemples de demandes :
+vos besoins, et laissez-le faire l'installation et les modifications. Le dépôt contient un `CLAUDE.md` (lu aussi par
+les autres agents via `AGENTS.md`) et un skill de mise en place guidée (`.claude/skills/setup/`) : demandez à Claude
+Code d'« installer Opointeuse », il pose les quelques questions utiles (cible, équipe, fuseau, fériés, horaires),
+puis exécute les étapes en demandant confirmation avant toute action irréversible. Exemples de demandes :
 
 - « Voici le dépôt : `https://github.com/<owner>/opointeuse`. Déploie-le sur mon compte Cloudflare, crée-moi un
   compte administrateur, fuseau Europe/Paris, jours fériés français. »
@@ -134,7 +151,9 @@ npm test           # tests unitaires et d'intégration
 npm run typecheck
 ```
 
-Pour `npm run dev`, copiez `.dev.vars.example` en `.dev.vars` et lancez une fois `npm run db:migrate:local`.
+Pour `npm run dev`, copiez `.dev.vars.example` en `.dev.vars` et lancez une fois `npm run db:migrate:local`, puis
+créez un compte local : `npm run user -- add demo --admin --d1-local --generate-password` (et
+`npm run user -- seed-demo demo --d1-local` pour des données de démo).
 
 ## Licence
 

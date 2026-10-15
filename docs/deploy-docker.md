@@ -39,8 +39,18 @@ The CLI is bundled in the image (`dist/server/cli.mjs`):
 docker compose exec opointeuse node dist/server/cli.mjs add alice --admin --generate-password
 ```
 
-It prints the password and the webhook token once. Other commands (list, password reset, import…) are in
-[users.md](users.md); run them the same way.
+It prints the password and the webhook token once. Other commands (list, password reset, unlock, import…) are in
+[users.md](users.md); run them the same way (`DATABASE_PATH=/data/opointeuse.db` is preset in the image, so no
+`--db` is needed).
+
+**Just trying it out?** Add a demo account filled with three months of realistic synthetic punches:
+
+```bash
+docker compose exec opointeuse node dist/server/cli.mjs add demo --generate-password
+docker compose exec opointeuse node dist/server/cli.mjs seed-demo demo
+```
+
+Remove it later with `docker compose exec opointeuse node dist/server/cli.mjs remove demo --yes`.
 
 ## Health check
 
@@ -109,11 +119,16 @@ with `Caddyfile`:
 ```caddyfile
 time.example.com {
     encode zstd gzip
+    header Strict-Transport-Security "max-age=31536000"
     reverse_proxy opointeuse:3000
 }
 ```
 
 and `caddy-data:` added under `volumes:`. In that case remove the `ports:` entry of the `opointeuse` service.
+
+Security notes (same as for Node, see [deploy-node.md](deploy-node.md#security-notes)): the app sets its own
+security headers but not HSTS (add it at the proxy, as above); per-IP rate limiting of `/api/login` belongs in the
+proxy; prefer the webhook token in a header, since proxy logs record URLs.
 
 ## Troubleshooting
 
@@ -123,3 +138,4 @@ and `caddy-data:` added under `volumes:`. In that case remove the `ports:` entry
 | Container restarts in a loop | `docker compose logs opointeuse`: most often a secret shorter than 32 characters. |
 | `permission denied` on `/data` | The volume must be writable by the `node` user; recreate it (`docker compose down -v` **deletes the data**) or fix ownership with `chown 1000:1000`. |
 | Cannot sign in | No account yet: step 3. |
+| Login answers 429 "Too many failed attempts" | Locked for 15 min after 10 wrong passwords. Wait, or `docker compose exec opointeuse node dist/server/cli.mjs unlock <username>`. |

@@ -53,7 +53,7 @@ Leave the other lines alone. In particular `"binding": "DB"` must stay as is: it
 npm run db:migrate:remote
 ```
 
-Answer `y` when Wrangler asks to apply `0001_init.sql`. Run the same command after any update that adds a migration
+Answer `y` when Wrangler asks to apply the migrations (`0001_init.sql`, `0002_login_throttle.sql`…). Run the same command after any update that adds a migration
 (see [Updating](#updating)).
 
 ## 4. Set the session secret
@@ -104,6 +104,16 @@ npm run user -- add alice --admin --generate-password --d1-remote
 The command prints the generated password and the webhook token **once**. Then open the URL and sign in. More
 options (name, language, time zone, other accounts): [users.md](users.md).
 
+**Just trying it out?** Fill a separate demo account with three months of realistic synthetic punches
+(leave, a sick day, a half day, a few anomalies):
+
+```bash
+npm run user -- add demo --generate-password --d1-remote
+npm run user -- seed-demo demo --d1-remote
+```
+
+Remove it later with `npm run user -- remove demo --d1-remote --yes`.
+
 ## 8. Set up your phone
 
 Settings → webhook URL, then follow [integrations/](integrations/README.md). On Android, open the site in Chrome and
@@ -115,6 +125,19 @@ Workers can be served from your own domain if it is managed by Cloudflare: dashb
 Worker → *Settings* → *Domains & Routes* → *Add* → *Custom domain*. HTTPS is automatic. Alternatively add a `routes`
 entry to `wrangler.jsonc`
 (see the [Cloudflare documentation](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)).
+
+## Security
+
+- HTTPS is automatic on `workers.dev` and custom domains. To add **HSTS**, enable it in the dashboard: your zone →
+  *SSL/TLS* → *Edge Certificates* → *HTTP Strict Transport Security* (custom domains only).
+- The app locks an account's web login for 15 minutes after 10 wrong passwords. To also slow down guessing across
+  accounts, add a **rate limiting rule** in the dashboard (*Security* → *WAF* → *Rate limiting rules*), for example
+  20 requests per minute per IP on the path `/api/login` (custom domains only).
+- Security headers of the static front end (CSP, `X-Frame-Options`…) come from [`public/_headers`](../public/_headers),
+  which Cloudflare applies to assets; API responses get theirs from the Worker. See
+  [configuration.md](configuration.md#security-headers).
+- With `observability` enabled (the default in `wrangler.jsonc`), request URLs appear in the Worker logs: configure
+  phones and readers with the token in a header rather than in `?token=` ([integrations/](integrations/README.md)).
 
 ## Updating
 
@@ -134,8 +157,12 @@ Migrations are applied once each, in order, and tracked by Wrangler. Take a back
 cp .dev.vars.example .dev.vars   # then edit SESSION_SECRET
 npm run db:migrate:local         # local D1 database
 npm run user -- add demo --admin --generate-password --d1-local
+npm run user -- seed-demo demo --d1-local   # optional: three months of demo data
 npm run dev                      # http://localhost:5173
 ```
+
+In development the front end has no CSP (`public/_headers` is not applied by Vite); to check the production headers
+locally, run `npm run build` then `npx wrangler dev -c dist/opointeuse/wrangler.json`.
 
 ## Costs
 
@@ -154,4 +181,6 @@ some CPU time at login; this is well within the free CPU budget for normal use.
 | `D1_ERROR: no such table: users` | Run `npm run db:migrate:remote` (step 3). |
 | `Couldn't find a D1 DB with the name or binding 'opointeuse'` | The `database_id` in `wrangler.jsonc` is still the zero placeholder. |
 | Login impossible, no account | Create one (step 7). |
+| Login answers 429 "Too many failed attempts" | The account is locked for 15 min after 10 wrong passwords. Wait, or `npm run user -- unlock <username> --d1-remote`. |
+| An API call from a script answers 415 | Add `-H 'Content-Type: application/json'` to requests with a body. |
 | Punches have the wrong day or hour | Set the account's time zone in Settings, or `DEFAULT_TIMEZONE`. |

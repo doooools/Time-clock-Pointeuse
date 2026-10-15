@@ -29,6 +29,8 @@ in Docker.
 - **Public holidays** for 14 regions (France, Alsace-Moselle, Belgium, Luxembourg, Switzerland, Canada, Québec,
   Germany, England & Wales, USA, Spain, Italy, Netherlands, Portugal), or none. Any IANA **time zone**.
 - **Configurable rules**: daily target, working days, weekend punches, starting balance and date.
+- **Secure by default**: PBKDF2 passwords, signed session cookies, per-account login lockout, CSRF protection,
+  strict Content-Security-Policy, no third-party script.
 
 ### Calculation rules in short
 
@@ -51,7 +53,7 @@ git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
 npm ci
 npm run build:node
 cp .env.example .env            # then set SESSION_SECRET in .env
-npm run user -- add alice --admin --generate-password --db ./data/opointeuse.db
+npm run user -- add alice --admin --generate-password
 npm start                       # http://localhost:3000
 ```
 
@@ -89,11 +91,25 @@ More: [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
 2. Copy your **webhook URL** and set up your phone or reader: [docs/integrations/](docs/integrations/README.md).
 3. Optionally import your history on the **Data** page.
 
+### Try it with demo data
+
+Want to see a populated app before punching for real? Create a separate account and fill it with three months of
+synthetic punches, leave and a few anomalies:
+
+```bash
+npm run user -- add demo --generate-password    # Docker: docker compose exec opointeuse node dist/server/cli.mjs …
+npm run user -- seed-demo demo                  # Cloudflare: add --d1-remote to both commands
+```
+
+Sign in as `demo`, and delete it later with `npm run user -- remove demo --yes`. Details: [docs/users.md](docs/users.md).
+
 ## Use it with Claude Code
 
 You do not have to follow the guides by hand. Give the repository link to [Claude Code](https://claude.com/claude-code)
-together with what you need, and let it do the set-up and the changes. The repository contains `CLAUDE.md` and a
-set-up skill so that it understands the project right away. Examples:
+together with what you need, and let it do the set-up and the changes. The repository contains `CLAUDE.md` (also
+read by other agents through `AGENTS.md`) and a guided set-up skill (`.claude/skills/setup/`): ask Claude Code to
+"set up Opointeuse" and it asks the few questions that matter (target, team, time zone, holidays, hours), then runs
+the steps, asking before anything irreversible. Examples:
 
 - "Here is the repo: `https://github.com/<owner>/opointeuse`. Deploy it on my Cloudflare account, create an admin
   account for me, time zone Europe/Brussels, Belgian holidays."
@@ -127,7 +143,9 @@ npm test           # unit and integration tests
 npm run typecheck
 ```
 
-For `npm run dev`, copy `.dev.vars.example` to `.dev.vars` and run `npm run db:migrate:local` once.
+For `npm run dev`, copy `.dev.vars.example` to `.dev.vars` and run `npm run db:migrate:local` once, then create a
+local account: `npm run user -- add demo --admin --d1-local --generate-password` (and
+`npm run user -- seed-demo demo --d1-local` for demo data).
 
 ## License
 

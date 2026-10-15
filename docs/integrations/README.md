@@ -11,7 +11,7 @@ badge reader.
 | [http.md](http.md) | You want `curl`, PowerShell, Home Assistant or a desktop shortcut |
 | [shared-badge-reader.md](shared-badge-reader.md) | A small company wants one wall badge reader for several employees |
 
-The same guides are available inside the app (Settings → Integrations), in French and English.
+The same guides are available inside the app (Settings page, below the webhook URL), in French and English.
 
 ## The webhook
 
@@ -33,8 +33,8 @@ request needs nothing else. Send it in one of three ways:
 | Header | `X-Webhook-Token: <token>` |
 | Bearer header | `Authorization: Bearer <token>` |
 
-Prefer a header when the client allows it: URLs end up in logs, browser history and proxies. A disabled account
-gets `401`.
+Prefer a header, and `POST` rather than `GET`, when the client allows it: URLs end up in server, proxy and
+Cloudflare logs and in browser history, and link previews may fetch a `GET` URL. A disabled account gets `401`.
 
 ### Behaviour
 
@@ -75,7 +75,8 @@ token). Always check the status code: a network failure or a `401` means **nothi
 - The token alone is enough to punch, with no password. Treat it like a password: do not publish it or share
   screenshots of a URL that contains it.
 - Opening the URL in a browser **records a punch**. Do not click it "to test" unless you mean it.
-- If the token leaks, regenerate it in Settings (or through `POST /api/me/webhook-token`). The old token stops
+- If the token leaks, regenerate it in Settings (or through `POST /api/me/webhook-token`, or
+  `npm run user -- token <username> --regenerate`). The old token stops
   working immediately; update every device that used it.
 - Prefer HTTPS. Over plain HTTP the token travels in clear text.
 - Phone NFC tags that contain the URL expose the token to anyone who scans them. Use the Tasker or Shortcuts

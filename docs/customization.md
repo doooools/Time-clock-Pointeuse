@@ -33,14 +33,15 @@ resets a setting goes back to the instance default.
 ## 2. Accounts and administration
 
 There is no sign-up page and no administration page. The first administrator is created from the command line,
-for example on a Node install whose `.env` sets `DATABASE_PATH`:
+for example on a Node install (the CLI reads `DATABASE_PATH` from `.env`):
 
 ```bash
 npm run user -- add alice --admin --generate-password
 ```
 
-The same CLI lists, adds, disables and removes accounts, resets passwords and shows or regenerates webhook
-tokens. It works on a SQLite file (`--db`, or `DATABASE_PATH`), on the local Cloudflare D1 (`--d1-local`) and on
+The same CLI lists, adds, disables and removes accounts, resets passwords, unlocks accounts locked after 10 wrong
+passwords, shows or regenerates webhook tokens, imports history and can fill a demo account with synthetic data
+(`seed-demo`). It works on a SQLite file (`--db`, or `DATABASE_PATH`), on the local Cloudflare D1 (`--d1-local`) and on
 the production D1 (`--d1-remote`). In Docker, use the bundled copy:
 `docker compose exec opointeuse node dist/server/cli.mjs list`. Full reference: `docs/users.md`.
 
@@ -107,8 +108,12 @@ Holiday names stay in each region's local language.
 2. Errors use `fail(c, status, "messageKey")`; add the key to both languages in `server/messages.ts`.
 3. Only use the database interface `Db` (`prepare`, `bind`, `first`, `all`, `run`, `batch`): the same code must
    run on D1 and SQLite.
-4. Client side: add a method to `src/lib/api.ts`, and a mutation to `src/lib/store.tsx` if it changes data.
-5. Test it in `test/`, which runs the real app on an in-memory SQLite database. `test/helpers.ts` provides
+4. Security comes for free: every `/api` route is behind the CSRF guard (JSON bodies, no cross-site browser
+   requests), the 1 MiB body limit and the security headers (`server/security.ts`). Use a non-GET method for
+   anything that changes data. Only a route meant for non-browser clients without JSON (like the webhook) needs an
+   exemption there.
+5. Client side: add a method to `src/lib/api.ts`, and a mutation to `src/lib/store.tsx` if it changes data.
+6. Test it in `test/`, which runs the real app on an in-memory SQLite database. `test/helpers.ts` provides
    `makeEnv()`, `addUser()` (an account with a signed-in client) and `twoAccounts()`. Include a case proving that
    another account cannot see or change the data.
 
@@ -118,16 +123,17 @@ The admin API is complete; only the screen is missing.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/admin/users` | list accounts (`id, username, displayName, role, disabled, createdAt`) |
+| `GET /api/admin/users` | list accounts (`id, username, displayName, role, disabled, createdAt, locked, lockedUntil`) |
 | `POST /api/admin/users` | create `{ username, password, displayName?, role?, settings? }` → `{ user, webhookToken }` |
-| `PATCH /api/admin/users/:id` | change `displayName`, `role`, `disabled`, `password`, `settings` |
+| `PATCH /api/admin/users/:id` | change `displayName`, `role`, `disabled`, `password`, `settings`; `unlock: true` lifts a login lock |
 | `POST /api/admin/users/:id/webhook-token` | regenerate a user's token |
 | `DELETE /api/admin/users/:id` | delete an account and all its data |
 | `GET /api/admin/users/:id/data` | that account's data, same shape as `/api/data` |
 
 A 409 means "duplicate username" or "last active admin".
 
-1. Add the calls to `src/lib/api.ts`.
+1. Add the calls to `src/lib/api.ts` (its `request()` helper already sends JSON with the right header, which the
+   server's CSRF protection requires).
 2. Create `src/pages/Admin.tsx`: a table of accounts with create, edit, disable and delete actions, plus a
    confirmation before deleting.
 3. In `src/App.tsx`, add a `<Route path="/admin">` and an entry in `NAV`, **only when the signed-in user is an
@@ -154,7 +160,12 @@ Start by writing the expected behaviour as a test in `shared/compute.test.ts`, t
 The "Giscard punk" design (photocopy, tape, tilted cards, no rounded corners) is driven by design tokens in the
 `@theme` block of `src/index.css`: colours (`--color-*`), fonts (`--font-*`) and shadows. Change the values
 there and every page follows; components only use Tailwind classes built from these tokens. Charts read the
-same tokens (`src/components/charts/Chart.tsx`). Web fonts are loaded in `index.html`.
+same tokens (`src/components/charts/Chart.tsx`). Web fonts are loaded from Google Fonts in `index.html`.
+
+The app ships a strict Content-Security-Policy: only its own scripts, plus Google Fonts. If you load fonts, images or
+scripts from another host, allow that host in `FRONT_CSP` (`server/security.ts`, used on Node and Docker) **and** in
+`public/_headers` (used by Cloudflare), with the same value; `npm test` checks that both match. Otherwise the browser
+silently blocks the resource (see the console).
 
 The product name shown in the UI is the `common.brand` translation; the browser title, PWA name and icon are in
 `index.html`, `public/manifest.webmanifest` and `public/icon.svg`.

@@ -7,7 +7,7 @@ webhook and shows the reply. No paid app is needed.
 
 - An iPhone with NFC background tag reading (iPhone XS or later; iOS 13+ for the NFC trigger).
 - An **NFC tag** (NTAG213/215 sticker or fob). A blank tag is fine.
-- Your **webhook URL**, from Settings → Integrations: `https://<your-host>/api/webhook/punch?token=<token>`.
+- Your **webhook URL**, from Settings → *Webhook URL*: `https://<your-host>/api/webhook/punch?token=<token>`.
   Open the settings on the iPhone and copy it.
 
 ## 1. Create the shortcut

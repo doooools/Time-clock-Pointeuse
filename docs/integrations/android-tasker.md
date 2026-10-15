@@ -12,7 +12,7 @@ Tasker menus are often in English; the English labels are given in parentheses w
 - **Tasker** from the Play Store (paid app, one-time purchase).
 - An **NFC tag**: a sticker or key fob (NTAG213/215) costs less than a euro. A blank tag is fine: Tasker reads its
   identifier, you never write to it.
-- Your **webhook URL** (Settings → Integrations): `https://<your-host>/api/webhook/punch?token=<token>`. Open the
+- Your **webhook URL** (Settings → *Webhook URL*): `https://<your-host>/api/webhook/punch?token=<token>`. Open the
   settings **on the phone** and use the copy button to paste it into Tasker without retyping.
 
 ## 1. Prepare Tasker (2 min)

@@ -2,7 +2,7 @@
 
 The webhook is an ordinary HTTP endpoint. See [README.md](README.md) for the request and response format.
 In the examples, replace `https://pointeuse.example.com` with your instance and `YOUR_TOKEN` with your account's
-webhook token (Settings → Integrations). Prefer sending the token in a header.
+webhook token (Settings → *Webhook URL*). Prefer sending the token in a header.
 
 ## curl
 

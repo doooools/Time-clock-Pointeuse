@@ -39,7 +39,8 @@ Reference docs: `docs/deploy-cloudflare.md`, `docs/deploy-node.md`, `docs/deploy
    targets that differ per person, are per-account settings (step 5).
 7. **Address**: Cloudflare (`*.workers.dev` or a custom domain), or the host/domain/port for Node/Docker, and
    whether a reverse proxy with HTTPS exists or is needed.
-8. **History to import?** A file of past timestamps (one per line, Excel/CSV copy-paste) for an account.
+8. **Existing data?** A file of past timestamps to import for an account (one or more per line, Excel/CSV
+   copy-paste), or a demo account with synthetic data to try the app first.
 
 Summarise the answers as a short plan and get a go-ahead.
 
@@ -75,25 +76,29 @@ region code in upper case).
 6. **Confirm**, then `npm run deploy` → note the printed URL.
 7. First admin: `npm run user -- add <username> --admin --d1-remote --generate-password` (add
    `--name "Display Name"`, `--locale`, `--timezone`, `--holidays` if they differ from the defaults).
-8. Optional custom domain: Cloudflare dashboard → Workers → the `opointeuse` worker → Domains & Routes.
+8. Optional custom domain: Cloudflare dashboard → Workers & Pages → the `opointeuse` worker → Settings → Domains &
+   Routes. With a custom domain, suggest enabling HSTS (SSL/TLS → Edge Certificates) and a rate limiting rule on
+   `/api/login` (Security → WAF), see `docs/deploy-cloudflare.md` ("Security").
 
 Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`), `npm run db:migrate:local`,
-`npm run user -- add demo --admin --d1-local --generate-password`, `npm run dev`.
+`npm run user -- add demo --admin --d1-local --generate-password`, `npm run user -- seed-demo demo --d1-local`
+(optional demo data), `npm run dev`.
 
 ## 3b. Node (machine or VPS)
 
 1. `npm run build:node` (front in `dist/client`, server bundle `dist/server/index.mjs`, CLI `dist/server/cli.mjs`).
-2. `cp .env.example .env` and set `SESSION_SECRET=…`, uncomment `DATABASE_PATH=./data/opointeuse.db` (the
-   server defaults to it, but the accounts CLI only finds the database through `DATABASE_PATH` or `--db`), the
-   `DEFAULT_*` values, and if needed `PORT` (3000) and `HOST` (0.0.0.0).
-3. **Confirm**, then `npm start`. The database and its folder are created and migrated at startup; the log shows
-   the URL and the database path.
-4. First admin (in another terminal, same folder so `.env` is read):
+2. `cp .env.example .env` and set `SESSION_SECRET=…`, the `DEFAULT_*` values, and if needed `PORT` (3000) and
+   `HOST` (0.0.0.0; `127.0.0.1` behind a local proxy). `DATABASE_PATH=./data/opointeuse.db` is already set; the
+   server and the CLI both use it.
+3. First admin (from the project folder, so `.env` is read; the database is created and migrated if needed):
    `npm run user -- add <username> --admin --generate-password`
    (or with the built CLI: `node dist/server/cli.mjs add <username> --admin --generate-password`).
+4. **Confirm**, then `npm start`. The log shows the URL and the database path.
 5. Keep it running: a systemd unit and a reverse proxy (Caddy or nginx) are in `docs/deploy-node.md`. The proxy
    must send `X-Forwarded-Proto` (Caddy does by default; nginx: `proxy_set_header X-Forwarded-Proto $scheme;`),
-   otherwise the session cookie is not marked `Secure`. Run a single Node process per database file.
+   otherwise the session cookie is not marked `Secure`. If the instance is on the Internet, also set HSTS and a
+   per-IP rate limit on `/api/login` at the proxy (examples in `docs/deploy-node.md`, "Security notes"). Run a
+   single Node process per database file.
 6. Backups: copy the SQLite file safely (`sqlite3 data/opointeuse.db ".backup backup.db"`, or stop the service).
 
 ## 3c. Docker (Compose)
@@ -106,7 +111,8 @@ Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`)
    `docker compose logs opointeuse`.
 4. First admin: `docker compose exec opointeuse node dist/server/cli.mjs add <username> --admin --generate-password`
    (`DATABASE_PATH=/data/opointeuse.db` is preset; data lives in the named volume `opointeuse-data`).
-5. HTTPS: put a reverse proxy in front (see `docs/deploy-docker.md`), forwarding `X-Forwarded-Proto`.
+5. HTTPS: put a reverse proxy in front (see `docs/deploy-docker.md`), forwarding `X-Forwarded-Proto`, with HSTS
+   and, on the Internet, a per-IP rate limit on `/api/login`.
 6. Updates: `git pull && docker compose up -d --build` (migrations run at startup). Back up the volume first.
 
 ## 4. Verify
@@ -117,7 +123,9 @@ curl -s <base-url>/api/me
 ```
 
 Then ask the user to open `<base-url>` in a browser and sign in with the admin account. `GET /api/me` answering
-500 with a SESSION_SECRET message means the secret is missing or too short.
+500 with a SESSION_SECRET message means the secret is missing or too short. A login answering 429 means 10 wrong
+passwords locked the account for 15 minutes: `npm run user -- unlock <username>` (same target flag). Scripted API
+calls with a body need `-H 'Content-Type: application/json'` (415 otherwise).
 
 ## 5. Accounts for a team
 
@@ -136,7 +144,12 @@ carried-over balance) are set by each user on the Settings page, or by an admin 
 (see `docs/api.md`).
 
 Import past history for an account: `npm run user -- import <username> <file> [--date-order dmy|mdy]`
-(duplicates within 60 s are skipped). Users can also paste data on the Data page.
+(`--dry-run` first to see parse errors; duplicates within 60 s are skipped). Users can also paste data on the Data
+page.
+
+Demo data, if the user wants to try the app first: a separate account, then
+`npm run user -- seed-demo demo` (three months of synthetic punches, leave and anomalies; `--months <n>` up to 24).
+Never seed a real person's account; remove the demo one later with `npm run user -- remove demo --yes`.
 
 ## 6. Punching from a phone or badge reader
 
@@ -147,9 +160,10 @@ punch URL is:
 <base-url>/api/webhook/punch?token=<token>
 ```
 
-`GET` or `POST`; the token can also go in an `X-Webhook-Token` or `Authorization: Bearer` header. Test it:
-`curl -s "<base-url>/api/webhook/punch?token=<token>"` → `{"ok":true,"action":"in",…}` (this records a real
-punch: tell the user, and offer to delete it from the History page). Phone setup guides: Android (Tasker + NFC)
+`GET` or `POST`; the token can also go in an `X-Webhook-Token` or `Authorization: Bearer` header. Recommend
+`POST` with the header whenever the client allows it (URLs end up in proxy and Cloudflare logs). Test it:
+`curl -s -X POST -H "X-Webhook-Token: <token>" <base-url>/api/webhook/punch` → `{"ok":true,"action":"in",…}`
+(this records a real punch: tell the user, and offer to delete it from the History page). Phone setup guides: Android (Tasker + NFC)
 `docs/integrations/android-tasker.md`, iPhone (Shortcuts) `docs/integrations/ios-shortcuts.md`, generic HTTP and
 badge readers `docs/integrations/`. The Settings page shows the same guide in the app.
 
