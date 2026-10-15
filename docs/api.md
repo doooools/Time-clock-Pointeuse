@@ -29,9 +29,9 @@ use `https://time.example.com` as the base URL.
 |---|---|
 | 400 | Invalid input (nothing was changed) |
 | 401 | Not signed in, session expired/revoked, wrong credentials, or invalid webhook token |
-| 403 | Admin role required, or a cross-site request |
+| 403 | Not allowed (missing right, or role too low for that account), or a cross-site request |
 | 404 | Unknown route, or the object does not exist **or belongs to another account** |
-| 409 | Conflict: username taken, or the last active admin would be removed |
+| 409 | Conflict: username taken, or the last active owner would be removed, demoted or disabled |
 | 413 | Body larger than 1 MiB |
 | 415 | A body without `Content-Type: application/json` |
 | 429 | Account locked after too many wrong passwords (see [`POST /api/login`](#post-apilogin)); `Retry-After` gives the seconds to wait |
@@ -66,8 +66,15 @@ Tells the front end who is signed in.
 { "authenticated": false, "defaultLocale": "en" }
 ```
 ```json
-{ "authenticated": true, "user": { "id": 1, "username": "alice", "displayName": "Alice", "role": "admin" }, "locale": "fr" }
+{ "authenticated": true, "locale": "fr",
+  "user": { "id": 1, "username": "alice", "displayName": "Alice", "role": "owner",
+            "permissions": { "editOwn": true, "viewPresence": false, "viewTeam": false },
+            "capabilities": { "manageAdmins": true, "manageUsers": true, "editOthers": true,
+                              "viewTeam": true, "viewPresence": true, "editOwn": true } } }
 ```
+
+`capabilities` are the *effective* rights (see [Roles, rights and capabilities](#roles-rights-and-capabilities)); the
+front end re-reads them when the tab regains focus.
 
 ### `POST /api/login`
 
@@ -117,7 +124,7 @@ and security advice: [integrations/README.md](integrations/README.md).
 
 ## Account data (session required)
 
-Everything below only ever touches the signed-in account.
+Everything below only ever touches the signed-in account (other accounts: [Team endpoints](#team-endpoints-session-required)).
 
 ### `GET /api/data`
 
@@ -131,7 +138,7 @@ Everything the app needs to compute the balance client-side:
                 "timezone": "Europe/Paris", "holidays": "FR", "balanceStartDate": null, "initialBalanceMin": 0,
                 "locale": "fr" },
   "serverNow": 1790330000000,
-  "user": { "id": 1, "username": "alice", "displayName": "Alice", "role": "admin" }
+  "user": { "id": 1, "username": "alice", "displayName": "Alice", "role": "owner" }
 }
 ```
 
@@ -193,33 +200,118 @@ curl -b jar.txt -X PUT -H 'Content-Type: application/json' \
   `400` (not `401`).
 - `POST /api/me/webhook-token` → `{ "webhookToken": "…" }`: generates a new token. The old one stops working at once.
 
-## Admin endpoints (role `admin`)
+## Roles, rights and capabilities
 
-Meant for scripts and a possible future admin page; the usual way to manage accounts is the command line
-([users.md](users.md)). A non-admin gets `403`.
+Authorization is decided **on the server only**, from the account's role and rights (`capabilities()` in
+`server/users.ts`); the front end merely hides what the server would refuse. Roles: `owner` (superadmin), `admin`,
+`user`. A `user` has three switchable rights; owners and admins have everything implicitly. The full guide is
+[team.md](team.md#roles-and-rights).
+
+| Right (`permissions`) | Default | Meaning |
+|---|---|---|
+| `editOwn` | on | add, edit and delete one's own punches and marks |
+| `viewPresence` | off | see who is in |
+| `viewTeam` | off | read colleagues' hours (read only) |
+
+| Capability | owner | admin | user |
+|---|---|---|---|
+| `manageAdmins`: appoint/remove owners and admins, manage their accounts | ✓ | | |
+| `manageUsers`: create, edit, disable, delete `user` accounts, passwords, tokens, unlock, rights | ✓ | ✓ (`user` accounts only) | |
+| `editOthers`: correct another account's hours | ✓ (all) | ✓ (`user` accounts only) | |
+| `viewTeam` | ✓ | ✓ | if the right is on |
+| `viewPresence` | ✓ | ✓ | if the right is on |
+| `editOwn` | ✓ | ✓ | if the right is on |
+
+Rules: there is always at least **one active owner** (demoting, disabling or deleting the last one gives `409`; an
+owner may demote themselves if another active owner exists). An admin can only create `user` accounts and cannot
+touch owners, other admins or their own account through the admin API (`403`). The **first account** created on an
+empty database is always an owner. An account the caller is not allowed to read answers `404`, not `403`.
+
+## Team endpoints (session required)
+
+| Request | Needs | Result |
+|---|---|---|
+| `GET /api/team` | `viewTeam`, `viewPresence` or `manageUsers` (else `403`) | `{ "members": [ { id, username, displayName, role, disabled } ] }` for owners/admins (all accounts). A `user` gets `{ id, displayName, role }` for active accounts only (`displayName` falls back to the username). |
+| `GET /api/team/presence` | `viewPresence` (else `403`) | `{ "members": [ { id, displayName, present, since, lastPunch } ] }`: active accounts, "today" cut in each account's own time zone. `since` = start of the open interval when `present`. |
+| `GET /api/team/:id/data` | yourself, or `viewTeam` | same payload as `GET /api/data` plus `"canEdit": boolean`. Unknown or unreadable account: `404` (a `user` cannot read disabled accounts). |
+| `POST /api/team/:id/punches` | `editOthers` on that account | same as `POST /api/punches` |
+| `PATCH` / `DELETE /api/team/:id/punches/:pid` | idem | same as the personal routes |
+| `POST /api/team/:id/punches/:pid/restore` | idem | idem |
+| `POST /api/team/:id/punches/bulk` | idem | idem |
+| `PUT` / `DELETE /api/team/:id/days/:date/mark` | idem | idem |
+
+Same validation as the personal routes (shared code). An account the caller cannot read gives `404`; one that can be
+read but not edited gives `403`. Rights are checked before the body is validated. Writing to one's **own** data through
+these routes follows `editOwn`.
+
+The personal routes (`/api/punches…`, `/api/days/:date/mark`) answer `403` ("you are not allowed to edit your hours")
+when the account lacks `editOwn`. The webhook and `PUT /api/settings` are not subject to it.
+
+## Change log and notifications (session required)
+
+Every correction of punches or marks, every import and every account administration action is recorded. The webhook
+and the settings a user changes on their own account are not.
+
+- `GET /api/journal?userId=&before=&limit=` → `{ "entries": [AuditEntryView], "next": number | null }`, newest first.
+  `limit` 1–200 (default 50), `before` = an entry id (cursor: pass `next` back), `userId` filters one account.
+  Invalid parameter: `400`. **Visibility**: without `viewTeam`, only entries about yourself; a `user` with `viewTeam`
+  also sees the `punch.*` / `mark.*` entries of other active accounts (not account administration); owners and admins
+  see everything. A `userId` you may not see gives `404`.
+- `GET /api/notifications` → `{ "notifications": [ { id, createdAt, entry: AuditEntryView } ] }`: your open
+  notifications, newest first, 200 at most.
+- `POST /api/notifications/dismiss` with `{ "ids": [1, 2] }` (up to 1000 positive integers) →
+  `{ "ok": true, "dismissed": n }`. Ids that are not yours or already dismissed are ignored.
+
+`AuditEntryView` = `{ id, at, action, actor: { id, displayName } | null, subject: { id, displayName }, target,
+before, after, source }`. `actor` is `null` for the command line (`source: "cli"`; otherwise `"web"`); `subject` is the
+account whose data changed (rebuilt from `before` for a deleted account); `displayName` falls back to the username.
+
+| `action` | `target` | `before` / `after` |
+|---|---|---|
+| `punch.create`, `punch.update`, `punch.delete`, `punch.restore` | punch id | `{ ts, note }` |
+| `punch.import` | – | `after = { inserted, skipped, from, to }` |
+| `mark.set`, `mark.clear` | date | `{ type, portion, half, note }` |
+| `user.create` | – | `after = { username, displayName, role, permissions, settings }` |
+| `user.update` | – | only the changed fields (`displayName`, `role`, `permissions`, `disabled`, `settings`, `password: "reset"`) |
+| `user.token`, `user.unlock`, `user.delete` | old id for `user.delete` | `user.delete`: `before = { username, displayName, role }` |
+
+Nothing is logged when nothing changed (identical PATCH, repeated delete…). Hashes, tokens and passwords are never
+stored in the log. **Notifications** are created only for `punch.*` and `mark.*`: a change made by someone else (an
+admin, or the command line) notifies the data's owner; a `user` changing their own hours notifies every active owner
+and admin; owners and admins editing their own hours notify nobody. Neither the log nor the notifications are purged
+automatically.
+
+## Admin endpoints (capability `manageUsers`)
+
+Meant for scripts; the web app uses the same routes from the [Team page](team.md#the-team-page), and the command line
+does the same ([users.md](users.md)). Without `manageUsers` the answer is `403`. What an admin may do to a given target
+account follows the [matrix above](#roles-rights-and-capabilities).
 
 | Request | Body | Result |
 |---|---|---|
-| `GET /api/admin/users` | – | `{ "users": [ { id, username, displayName, role, disabled, createdAt, locked, lockedUntil } ] }` (`locked`: login lockout active) |
-| `POST /api/admin/users` | `{ username, password, displayName?, role?, settings? }` | `201` `{ "user", "webhookToken" }`; `409` if the username exists |
-| `PATCH /api/admin/users/:id` | `{ displayName?, role?, disabled?, password?, settings?, unlock? }` | `{ "user" }` |
+| `GET /api/admin/users` | – | `{ "users": [ { id, username, displayName, role, permissions, disabled, createdAt, locked, lockedUntil } ] }` (`locked`: login lockout active) |
+| `POST /api/admin/users` | `{ username, password, displayName?, role?, permissions?, settings? }` | `201` `{ "user", "webhookToken" }`; `409` if the username exists |
+| `PATCH /api/admin/users/:id` | `{ displayName?, role?, permissions?, disabled?, password?, settings?, unlock? }` | `{ "user" }` |
 | `POST /api/admin/users/:id/webhook-token` | – | `{ "webhookToken" }` |
 | `DELETE /api/admin/users/:id` | – | `{ "ok": true }` (permanent: punches and marks are deleted too) |
-| `GET /api/admin/users/:id/data` | – | same payload as `GET /api/data`, for that account |
+
+To read another account's data use [`GET /api/team/:id/data`](#team-endpoints-session-required).
 
 - `username`: 1–64 characters among letters, digits and `. _ @ -`; unique, case-insensitive.
-- `role`: `admin` or `user` (default `user`). `displayName`: ≤ 100 characters.
+- `role`: `owner`, `admin` or `user` (default `user`). Only an owner can assign `owner` or `admin`; an admin trying to
+  gets `403`. `displayName`: ≤ 100 characters.
+- `permissions`: `{ editOwn?, viewPresence?, viewTeam? }` booleans (partial in `PATCH`); anything else gives `400`.
 - `password`: 8–1024 characters. Setting a password, or `disabled: true`, signs the account out everywhere.
   Setting a password also lifts a login lock.
 - `unlock: true` lifts a login lock (`locked` / `lockedUntil` in the user view). `disabled: false` does not.
 - `settings` in `POST` is validated like `PUT /api/settings`; in `PATCH` it is **merged** into the stored settings
   (`null` removes a key).
-- **Last-admin guard**: demoting, disabling or deleting the last active admin gives `409`. An admin may demote
-  themselves if another active admin exists.
+- **Last-owner guard**: demoting, disabling or deleting the last active owner gives `409`.
+- A change of rights takes effect on the person's next request (the account is reloaded every time; no sign-out).
 
 ```bash
 curl -b jar.txt -H 'Content-Type: application/json' \
-  -d '{"username":"bob","password":"a long passphrase","displayName":"Bob","settings":{"locale":"fr"}}' \
+  -d '{"username":"bob","password":"a long passphrase","displayName":"Bob","permissions":{"viewPresence":true},"settings":{"locale":"fr"}}' \
   https://time.example.com/api/admin/users
 ```
 

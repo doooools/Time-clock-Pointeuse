@@ -25,28 +25,31 @@ Many needs are covered by settings. Check these before editing code.
 | A 4-day week | `workdays` = `[1,2,3,4]` and the matching daily target |
 | Carry over an existing balance | `balanceStartDate` + `initialBalanceMin` on the Settings page |
 | A local holiday missing from your region | Mark the day as `holiday` in the History page (or add a region, §3) |
-| Accounts for a team | One account per person with the CLI (`docs/users.md`); each gets its own webhook token |
+| Accounts for a team | One account per person, from the Team page or the CLI (`docs/users.md`, `docs/team.md`); each gets its own webhook token |
+| Who sees what | Roles superadmin / admin / user and the rights `view-presence`, `view-team`, `edit-own` per account (`docs/team.md`) |
 
 Settings are layered: code defaults, then the instance defaults, then each account's own choices. A user who
 resets a setting goes back to the instance default.
 
 ## 2. Accounts and administration
 
-There is no sign-up page and no administration page. The first administrator is created from the command line,
-for example on a Node install (the CLI reads `DATABASE_PATH` from `.env`):
+There is no sign-up page. The first account is created from the command line and becomes the **superadmin**
+(`owner`) automatically, for example on a Node install (the CLI reads `DATABASE_PATH` from `.env`):
 
 ```bash
-npm run user -- add alice --admin --generate-password
+npm run user -- add alice --generate-password
 ```
 
 The same CLI lists, adds, disables and removes accounts, resets passwords, unlocks accounts locked after 10 wrong
 passwords, shows or regenerates webhook tokens, imports history and can fill a demo account with synthetic data
-(`seed-demo`). It works on a SQLite file (`--db`, or `DATABASE_PATH`), on the local Cloudflare D1 (`--d1-local`) and on
+(`seed-demo`, `demo-team`) and changes roles and rights (`role`, `perm`). It works on a SQLite file (`--db`, or `DATABASE_PATH`), on the local Cloudflare D1 (`--d1-local`) and on
 the production D1 (`--d1-remote`). In Docker, use the bundled copy:
 `docker compose exec opointeuse node dist/server/cli.mjs list`. Full reference: `docs/users.md`.
 
-Administrators can also call the admin API (`/api/admin/users`, described in `docs/api.md`). For safety, the
-last active administrator can never be deleted, disabled or demoted.
+Once someone is signed in, owners and admins manage the other accounts from the **Team page** (create, rights, password
+reset, token, disable, delete), which uses the admin API (`/api/admin/users`, described in `docs/api.md`). Roles, rights,
+the change log and the privacy side are explained in `docs/team.md`. For safety, the last active superadmin can never be
+deleted, disabled or demoted.
 
 ## 3. Add a public-holiday region
 
@@ -102,7 +105,9 @@ Holiday names stay in each region's local language.
 
 ## 6. Add an API route
 
-1. Add the handler to `server/routes/api.ts` (signed-in user) or `server/routes/admin.ts` (administrators). Read
+1. Add the handler to `server/routes/api.ts` (signed-in user) or `server/routes/admin.ts` / `team.ts` (people with the right capability, via `requireCapability`).
+   For anything that changes punches, marks or accounts, call `recordChange` afterwards (it writes the change log and the
+   notifications), and decide who may call it from `capabilities()` on the server, never from the front end alone. Read
    the body with `readBody(c)`, validate every field, and **always filter by the current account**:
    `WHERE … AND user_id = ?` bound to `c.get("user").id`. An object belonging to someone else answers 404.
 2. Errors use `fail(c, status, "messageKey")`; add the key to both languages in `server/messages.ts`.
@@ -117,32 +122,32 @@ Holiday names stay in each region's local language.
    `makeEnv()`, `addUser()` (an account with a signed-in client) and `twoAccounts()`. Include a case proving that
    another account cannot see or change the data.
 
-## 7. Build an administration page
+## 7. Extend the Team page
 
-The admin API is complete; only the screen is missing.
+The Team page (`src/pages/Team.tsx`) and the Journal page (`src/pages/Journal.tsx`) already exist: presence board, member
+list, account creation, rights, password reset, token, unlock, disable, delete. They sit on these routes (all described in
+`docs/api.md`): `GET /api/team`, `GET /api/team/presence`, `GET /api/team/:id/data`, `/api/team/:id/…` writes,
+`/api/admin/users…`, `GET /api/journal`, `/api/notifications`. A 409 means "duplicate username" or "last active owner".
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/admin/users` | list accounts (`id, username, displayName, role, disabled, createdAt, locked, lockedUntil`) |
-| `POST /api/admin/users` | create `{ username, password, displayName?, role?, settings? }` → `{ user, webhookToken }` |
-| `PATCH /api/admin/users/:id` | change `displayName`, `role`, `disabled`, `password`, `settings`; `unlock: true` lifts a login lock |
-| `POST /api/admin/users/:id/webhook-token` | regenerate a user's token |
-| `DELETE /api/admin/users/:id` | delete an account and all its data |
-| `GET /api/admin/users/:id/data` | that account's data, same shape as `/api/data` |
+Typical extensions:
 
-A 409 means "duplicate username" or "last active admin".
+- **A new right** (say "can export the team"): add a `perm_<name>` column in a new migration (never edit `0001`), then the
+  key in `PERMISSION_KEYS` / `PERMISSION_COLUMNS` / `DEFAULT_PERMISSIONS` and a capability in `capabilities()`
+  (`server/users.ts`), accept it in `parsePermissions` (so `POST/PATCH /api/admin/users` carry it), protect the routes with
+  `requireCapability("<name>")`, mirror it in `withCapabilities()` (`src/lib/me.tsx`, cosmetic only), add a checkbox in
+  `Team.tsx`, the CLI flag in `scripts/cli/`, labels in `src/i18n/locales/{fr,en}/team.ts`, tests in `test/roles.test.ts`,
+  and the table in `docs/team.md` and `docs/api.md`.
+- **A new logged action**: add it to `AuditAction` / `AUDIT_ACTIONS` in `server/audit.ts`, call `recordChange` after the
+  successful mutation (only when something changed; never put a hash, token or password in `before` / `after`), describe
+  it in `describeChange()` (`src/lib/audit.ts`) with texts in the `journal` namespace (FR and EN), and decide whether it
+  notifies (only `punch.*` and `mark.*` do, see the rules in `docs/architecture.md`).
+- **A column or filter on the Team page**: the lists come from `GET /api/team` (a `user` gets a reduced view: keep it that
+  way) and `GET /api/admin/users` (owners and admins).
+- **Showing a member's data elsewhere**: load `GET /api/team/:id/data` (or reuse `StoreProvider subjectId={id}`, which also
+  gives `canEdit`) and compute with `computeDays(punches, marks, settings, Date.now())` from `shared/compute.ts`.
 
-1. Add the calls to `src/lib/api.ts` (its `request()` helper already sends JSON with the right header, which the
-   server's CSRF protection requires).
-2. Create `src/pages/Admin.tsx`: a table of accounts with create, edit, disable and delete actions, plus a
-   confirmation before deleting.
-3. In `src/App.tsx`, add a `<Route path="/admin">` and an entry in `NAV`, **only when the signed-in user is an
-   admin** (`useStore().user.role === "admin"`). The server already refuses non-admins (403); hiding the page is
-   a convenience.
-4. Put the texts in a new `admin` namespace: `src/i18n/locales/fr/admin.ts`, `en/admin.ts`, registered in both
-   `index.ts` files.
-5. To display a member's history, load `GET /api/admin/users/:id/data` and compute it with
-   `computeDays(punches, marks, settings, Date.now())` from `shared/compute.ts`, like the History page does.
+The server is the only authority: the front end hides what `capabilities` says is not allowed, but every route checks
+again (a forbidden object answers 404, a forbidden action 403).
 
 ## 8. Change the computation rules
 

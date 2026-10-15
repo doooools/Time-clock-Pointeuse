@@ -2,7 +2,7 @@
 
 Instructions for AI coding agents working on Opointeuse live in **[CLAUDE.md](CLAUDE.md)**: repository map,
 commands, invariants that must not break, conventions and step-by-step recipes (deploy, accounts, holiday
-regions, settings, languages, API routes, admin page, computation rules, theme, migrations).
+regions, settings, languages, API routes, the Team page, computation rules, theme, migrations).
 
 Read it first. Then, as needed:
 

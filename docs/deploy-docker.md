@@ -31,12 +31,12 @@ startup. To use another host port, change `"3000:3000"` in `docker-compose.yml` 
 
 Logs: `docker compose logs -f opointeuse`.
 
-## 3. Create the first admin
+## 3. Create the first account (superadmin)
 
 The CLI is bundled in the image (`dist/server/cli.mjs`):
 
 ```bash
-docker compose exec opointeuse node dist/server/cli.mjs add alice --admin --generate-password
+docker compose exec opointeuse node dist/server/cli.mjs add alice --generate-password
 ```
 
 It prints the password and the webhook token once. Other commands (list, password reset, unlock, import…) are in

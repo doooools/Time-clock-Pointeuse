@@ -10,7 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Personal time clock: punch in/out through a webhook (NFC tag, Tasker, iOS Shortcuts, any HTTP client), daily
   and weekly balance, estimated departure time, history editing, statistics and Excel/CSV export and import.
 - **Multi-account**: one person or a small company on a single instance; per-user settings, webhook token and
-  data isolation. Accounts are managed with the `npm run user` CLI and an admin REST API (no admin UI).
+  data isolation.
+- **Team management**: roles superadmin (`owner`) / admin / user with per-account rights (edit own hours, see who is
+  in, view colleagues' hours — the last two off by default); the first account created is the superadmin. A **Team
+  page** (presence board, member list, account creation and administration), read-only views of a colleague's
+  hours, and corrections by admins on `user` accounts. Accounts are also managed with the `npm run user` CLI
+  (`add --owner|--admin`, `role`, `perm`) and the admin REST API.
+- **Change log and notifications**: every correction of punches or marks, every import and every account
+  administration action is recorded (who, when, before/after, web or command line), with a Journal page. The person
+  whose hours were changed by someone else is notified by a persistent window closed only by "Got it";
+  admins are notified when a user edits their own hours.
+- `npm run user -- demo-team` creates a four-account demo team (superadmin, admin, user with presence, user without
+  edit rights) with synthetic data and a pending notification.
+- `docs/team.md`: team management guide, with a privacy section (inform employees, visibility off by default, limit
+  access; not legal advice).
 - **Three deployment targets**: Cloudflare Workers + D1, a Node server (built-in `node:sqlite`, no native
   dependency) and Docker.
 - **Bilingual interface and messages** (French and English, chosen per user).
@@ -25,7 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 - PBKDF2 password hashing, signed HttpOnly session cookies with server-side revocation (`session_version`),
   login and password-change throttling, constant-time token comparison, strict security headers.
-- Account isolation enforced on every data route; the last active admin cannot be removed or demoted.
+- Account isolation enforced on every data route; authorization decided on the server from role and rights; the last
+  active superadmin cannot be removed, disabled or demoted.
 - Settings input sanitized (including prototype-pollution safe handling).
 - Dev-dependency advisories (wrangler/miniflare, undici, sharp, source-map-js) fixed by non-breaking updates;
   `npm audit` reports 0 vulnerabilities.

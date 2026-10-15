@@ -13,7 +13,7 @@ flowchart LR
   end
 
   subgraph App["Hono app (server/app.ts) — same code on every runtime"]
-    API["/api/* routes<br/>auth · data · settings · admin"]
+    API["/api/* routes<br/>auth · data · settings · team · journal · admin"]
     WH["/api/webhook/punch"]
     ENG["shared/ engine<br/>(compute, time, holidays, settings)"]
     DBI["Db interface<br/>(server/db/types.ts)"]
@@ -40,6 +40,13 @@ flowchart LR
 - **The front end does the computation.** `GET /api/data` returns the raw punches, day marks and the user's
   resolved settings; `src/lib/store.tsx` calls `computeDaysFromGroups()` from `shared/compute.ts` and
   recomputes every minute (live balance). Nothing derived is stored.
+- **Subject mode.** `StoreProvider` in `src/lib/store.tsx` loads either my data (`/api/data`) or a member's
+  (`/api/team/:id/data`). `useStore()` exposes `subject { id, displayName, isMe }` and `canEdit` (from the server), mutations
+  go to `/api/…` or `/api/team/:id/…` through `api.dataFor(subjectId)`, and the pages hide editing when `!canEdit`. The routes
+  `/team/:id`, `/team/:id/history` and `/team/:id/stats` reuse the same pages with a banner. `useMe()` (`src/lib/me.tsx`)
+  gives the current user with `capabilities`. `NotificationsModal` polls `/api/notifications` (on load, every 60 s, on tab
+  focus) and only closes with its button. `describeChange()` (`src/lib/audit.ts`) turns a log entry into text for both the
+  modal and the Journal page.
 - **The server is thin.** It authenticates, validates and stores. The only computation it runs is for the
   webhook reply (worked today, balance, estimated departure), with the same `shared/` functions.
 - **One app, two runtimes.** `server/app.ts` only depends on Web APIs (`fetch`, `crypto.subtle`) and on the
@@ -62,25 +69,31 @@ types, `server` + `shared`, Node files excluded), `tsconfig.node.json` (Node typ
 
 ## Data model
 
-`migrations/0001_init.sql` + `0002_login_throttle.sql` — portable between D1 and SQLite ≥ 3.35.
+`migrations/0001_init.sql` (a single migration) — portable between D1 and SQLite ≥ 3.35.
 
 ```mermaid
 erDiagram
   users ||--o{ punches : has
   users ||--o{ day_marks : has
+  users ||--o{ audit_log : "subject of"
+  users ||--o{ notifications : receives
+  audit_log ||--o{ notifications : announced_by
   users {
     INTEGER id PK
     TEXT username "UNIQUE, COLLATE NOCASE"
     TEXT display_name
     TEXT password_hash "pbkdf2-sha256$100000$salt$hash"
-    TEXT role "admin | user"
+    TEXT role "owner | admin | user"
     TEXT webhook_token "UNIQUE, 64 hex chars"
     TEXT settings "JSON Partial<Settings>"
     INTEGER session_version "bumped to revoke sessions"
     INTEGER created_at "epoch ms"
     INTEGER disabled_at "NULL = active"
-    INTEGER failed_logins "consecutive wrong passwords (0002)"
-    INTEGER locked_until "epoch ms, NULL = not locked (0002)"
+    INTEGER failed_logins "consecutive wrong passwords"
+    INTEGER locked_until "epoch ms, NULL = not locked"
+    INTEGER perm_edit_own "1 default"
+    INTEGER perm_view_presence "0 default"
+    INTEGER perm_view_team "0 default"
   }
   punches {
     INTEGER id PK
@@ -106,6 +119,12 @@ erDiagram
 - Deleting a punch sets `deleted_at` (the UI offers "undo" → `POST /api/punches/:id/restore`).
 - `settings` stores only what the user changed; it is re-sanitized on every read, so removed or invalid keys
   are ignored. No migration is needed to add a setting.
+- `audit_log` is the change log: `at`, `actor_id` (NULL = command line or deleted account), `subject_id` (account whose
+  data changed; NULL once that account is deleted, the `user.delete` entry keeping the old name in `before`), `action`,
+  `target`, `before` / `after` (JSON, never a hash, token or password), `source` (`web` | `cli`). `notifications` links a
+  recipient (`user_id`) to an entry (`audit_id`) until `dismissed_at` is set. Both cascade with the account.
+- The schema was never published in another shape, so there is one migration; databases created during development are
+  recreated, not upgraded. Later changes are new numbered files (append-only).
 - Migrations are tracked in `d1_migrations` (wrangler's table, reused by `server/migrate.ts` on Node).
 
 ## Settings resolution
@@ -183,7 +202,7 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
   iterations (the Workers maximum), random salt, `verifyPassword` in constant time (`server/passwords.ts`).
 - **Login** (`POST /api/login`): username case-insensitive. Failures (wrong password, unknown or disabled user)
   return the same 401 after ~800 ms, and an unknown user still runs a PBKDF2 check (no user enumeration by timing).
-- **Lockout** (migration 0002, `server/users.ts`): before each password check of an existing account (login and
+- **Lockout** (`server/users.ts`): before each password check of an existing account (login and
   `POST /api/me/password`), `reserveLoginAttempt` counts the attempt atomically in SQL, so parallel requests cannot
   exceed `LOGIN_MAX_FAILURES` (10) per period; the 10th failure sets `locked_until = now + 15 min`. While locked, the
   password is not even checked: 429 with `Retry-After`, message in the instance language. A correct password calls
@@ -196,8 +215,23 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
   `session_version`. Changing a password, an admin password reset or disabling an account bumps
   `session_version`, which revokes every existing cookie (the current one is re-issued after a self-service
   password change).
-- **Roles**: `user` (own data only) and `admin` (plus `/api/admin/*`). The last active admin cannot be deleted,
-  disabled or demoted; the check is inside the SQL statement, so it holds under concurrency.
+- **Roles and capabilities**: `owner` (superadmin), `admin`, `user`, plus three rights on `user` accounts
+  (`perm_edit_own` on, `perm_view_presence` and `perm_view_team` off). Authorization is **always decided on the server**
+  from `capabilities(user)` in `server/users.ts` (`manageAdmins`, `manageUsers`, `editOthers`, `viewTeam`,
+  `viewPresence`, `editOwn`), with `canManageUser`, `canAssignRole`, `canEditData` and `canViewData` for a given target
+  account; routes are protected by `requireCapability(name)` (`server/auth.ts`). `/api/me` returns the capabilities so
+  the front end can hide what would be refused, nothing more. The last active owner cannot be deleted, disabled or
+  demoted; the check is inside the SQL statement, so it holds under concurrency. The first account created on an empty
+  database is forced to `owner`. An account the caller cannot read answers 404.
+- **Change log and notifications** (`server/audit.ts`): every successful mutation of punches, marks or accounts calls
+  `recordChange(db, entry)` after the write (not atomic with it: a failure is logged with `console.error`, never turned
+  into a 500). It inserts the `audit_log` row and, for `punch.*` / `mark.*` only, the notifications: the data's owner when
+  someone else (admin or CLI) acted; every active owner and admin when a `user` edited their own hours; nobody when an
+  owner or admin edited their own. No entry when nothing changed. The webhook and own settings are not logged.
+  Routes: `server/routes/journal.ts` (`/api/journal`, `/api/notifications`), `server/routes/presence.ts`
+  (`/api/team/presence`), `server/routes/team.ts` (`/api/team…`), `server/punches.ts` (`dataWriteRoutes`: the punch and
+  mark mutations, mounted once for the signed-in account under `/api` and once for a member under `/api/team/:id`, so
+  the validation is shared). `server/app.ts` mounts presence and journal before the `/api/team/:id` routes.
 - **Webhook**: the per-account token (`?token=`, `X-Webhook-Token` or `Authorization: Bearer`) identifies the
   user; no cookie. Regenerating it invalidates the old one.
 - Behind a TLS reverse proxy on Node, `entry/node.ts` honours `X-Forwarded-Proto: https` so the cookie keeps
@@ -222,7 +256,7 @@ Mounted in `server/app.ts`, identical on every runtime:
 ## Internationalisation
 
 - **Front end** (`src/i18n/`): dictionaries per namespace (`common`, `login`, `dashboard`, `history`, `stats`,
-  `data`, `settings`, `integrations`). French is the typed reference; each English file is typed
+  `data`, `settings`, `integrations`, `team`, `journal`, `notifications`). French is the typed reference; each English file is typed
   `Record<keyof typeof fr, string>`, so a missing key fails the build. `t("ns.key", vars)` with `{name}`
   interpolation and `key_one` / `key_other` plurals (`count`). Dates and numbers via `Intl` (`intlTag`).
 - **Language choice**: the account's `settings.locale` once signed in (changing it saves the setting); before
@@ -250,7 +284,7 @@ Mounted in `server/app.ts`, identical on every runtime:
 
 - **Computation client side.** One payload, instant navigation and live updates without polling; the server stays
   simple and cheap (fits the Workers free plan). Cost: the whole history is sent on load (fine for years of
-  punches: a few hundred kB), and an admin view of another account must compute in the browser too.
+  punches: a few hundred kB), and viewing a colleague's hours computes in the browser too.
 - **Bare punches, derived pairing.** Robust to forgotten or double punches (fix by editing one timestamp), no
   in/out state to get out of sync. Cost: no night shifts across midnight.
 - **Webhook tokens stored in clear.** They are shown on the Settings page so the user can configure a phone,
@@ -272,4 +306,9 @@ Mounted in `server/app.ts`, identical on every runtime:
   database file (no multi-instance locking beyond `busy_timeout`).
 - **Settings as JSON per account** rather than columns: adding a setting needs no migration; validation lives in
   one place (`sanitizeSettings`).
-- **No admin UI** (yet): the admin API is complete and tested; accounts are usually managed once, from the CLI.
+- **Team features are invisible to a solo user.** One account = no Team link, no notification; the same code serves one
+  person or a team. Rights are off by default (privacy first) except editing one's own hours.
+- **No approval workflow.** A correction by a manager applies at once; the guarantee is transparency (change log +
+  a notification the person must acknowledge), not a validation step.
+- **Log and notifications are written after the mutation**, not in the same transaction (simple and portable to D1);
+  they are never purged automatically (small volume for a small team).

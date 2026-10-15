@@ -1,13 +1,13 @@
 ---
 name: setup
-description: Guided installation of Opointeuse (self-hosted time clock). Use when the user wants to install, set up, deploy, self-host or configure Opointeuse, on Cloudflare Workers + D1, on a Node server or with Docker, for one person or a team — e.g. "deploy this on Cloudflare", "install it on my VPS with Docker", "set it up for my 10-person company in Belgium". Asks the needed questions, then runs the steps (database, secrets, defaults, migrations, first admin, deploy, checks, webhook URL).
+description: Guided installation of Opointeuse (self-hosted time clock). Use when the user wants to install, set up, deploy, self-host or configure Opointeuse, on Cloudflare Workers + D1, on a Node server or with Docker, for one person or a team — e.g. "deploy this on Cloudflare", "install it on my VPS with Docker", "set it up for my 10-person company in Belgium". Asks the needed questions, then runs the steps (database, secrets, defaults, migrations, first account (superadmin), deploy, checks, webhook URL).
 ---
 
 # Set up Opointeuse
 
 Walk the user through a working instance, end to end. Read `CLAUDE.md` first if it is not already in context.
 Reference docs: `docs/deploy-cloudflare.md`, `docs/deploy-node.md`, `docs/deploy-docker.md`,
-`docs/configuration.md`, `docs/users.md`, `docs/integrations/`.
+`docs/configuration.md`, `docs/users.md`, `docs/team.md`, `docs/integrations/`.
 
 ## Ground rules
 
@@ -28,7 +28,8 @@ Reference docs: `docs/deploy-cloudflare.md`, `docs/deploy-node.md`, `docs/deploy
 
 1. **Target**: Cloudflare Workers + D1 (free, no server to maintain, needs a Cloudflare account) · Node on a
    machine/VPS · Docker (Compose). If unsure: Cloudflare for zero maintenance, Docker for an existing server.
-2. **Who**: just them, or a team? For a team: list of usernames (and display names), who is admin.
+2. **Who**: just them, or a team? For a team: list of usernames (and display names), who should be admin (the first account created is always the
+   **superadmin**, i.e. the person asking), and who may see presence or colleagues' hours (off by default).
 3. **Language** of the interface and webhook messages: `en` or `fr` (per account; the instance default applies
    to new accounts).
 4. **Time zone** (IANA, e.g. `Europe/Brussels`, `America/Montreal`).
@@ -74,14 +75,15 @@ region code in upper case).
 5. **Confirm**, then `npx wrangler secret put SESSION_SECRET` (paste the generated value when prompted; the user
    may prefer to type it themselves).
 6. **Confirm**, then `npm run deploy` → note the printed URL.
-7. First admin: `npm run user -- add <username> --admin --d1-remote --generate-password` (add
+7. First account (it becomes the **superadmin**, role `owner`, automatically):
+   `npm run user -- add <username> --d1-remote --generate-password` (add
    `--name "Display Name"`, `--locale`, `--timezone`, `--holidays` if they differ from the defaults).
 8. Optional custom domain: Cloudflare dashboard → Workers & Pages → the `opointeuse` worker → Settings → Domains &
    Routes. With a custom domain, suggest enabling HSTS (SSL/TLS → Edge Certificates) and a rate limiting rule on
    `/api/login` (Security → WAF), see `docs/deploy-cloudflare.md` ("Security").
 
 Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`), `npm run db:migrate:local`,
-`npm run user -- add demo --admin --d1-local --generate-password`, `npm run user -- seed-demo demo --d1-local`
+`npm run user -- add demo --d1-local --generate-password`, `npm run user -- seed-demo demo --d1-local`
 (optional demo data), `npm run dev`.
 
 ## 3b. Node (machine or VPS)
@@ -90,9 +92,9 @@ Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`)
 2. `cp .env.example .env` and set `SESSION_SECRET=…`, the `DEFAULT_*` values, and if needed `PORT` (3000) and
    `HOST` (0.0.0.0; `127.0.0.1` behind a local proxy). `DATABASE_PATH=./data/opointeuse.db` is already set; the
    server and the CLI both use it.
-3. First admin (from the project folder, so `.env` is read; the database is created and migrated if needed):
-   `npm run user -- add <username> --admin --generate-password`
-   (or with the built CLI: `node dist/server/cli.mjs add <username> --admin --generate-password`).
+3. First account, which becomes the **superadmin** (from the project folder, so `.env` is read; the database is created
+   and migrated if needed): `npm run user -- add <username> --generate-password`
+   (or with the built CLI: `node dist/server/cli.mjs add <username> --generate-password`).
 4. **Confirm**, then `npm start`. The log shows the URL and the database path.
 5. Keep it running: a systemd unit and a reverse proxy (Caddy or nginx) are in `docs/deploy-node.md`. The proxy
    must send `X-Forwarded-Proto` (Caddy does by default; nginx: `proxy_set_header X-Forwarded-Proto $scheme;`),
@@ -109,7 +111,7 @@ Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`)
    Change the published port in `ports` if 3000 is taken.
 3. **Confirm**, then `docker compose up -d --build`. Check `docker compose ps` (healthcheck on `/api/me`) and
    `docker compose logs opointeuse`.
-4. First admin: `docker compose exec opointeuse node dist/server/cli.mjs add <username> --admin --generate-password`
+4. First account (the **superadmin**): `docker compose exec opointeuse node dist/server/cli.mjs add <username> --generate-password`
    (`DATABASE_PATH=/data/opointeuse.db` is preset; data lives in the named volume `opointeuse-data`).
 5. HTTPS: put a reverse proxy in front (see `docs/deploy-docker.md`), forwarding `X-Forwarded-Proto`, with HSTS
    and, on the Internet, a per-IP rate limit on `/api/login`.
@@ -122,7 +124,7 @@ curl -s <base-url>/api/me
 # → {"authenticated":false,"defaultLocale":"fr"}   (the configured DEFAULT_LOCALE)
 ```
 
-Then ask the user to open `<base-url>` in a browser and sign in with the admin account. `GET /api/me` answering
+Then ask the user to open `<base-url>` in a browser and sign in with that first (superadmin) account. `GET /api/me` answering
 500 with a SESSION_SECRET message means the secret is missing or too short. A login answering 429 means 10 wrong
 passwords locked the account for 15 minutes: `npm run user -- unlock <username>` (same target flag). Scripted API
 calls with a body need `-H 'Content-Type: application/json'` (415 otherwise).
@@ -137,9 +139,17 @@ npm run user -- add <username> --name "Display Name" --generate-password [--loca
 npm run user -- list
 ```
 
+Once signed in, the superadmin can also add people from the **Team** page (the app shows the generated password once).
+Roles: `owner` (superadmin), `admin` (manages and corrects the `user` accounts), `user`. Appoint an admin with
+`npm run user -- role <username> admin`; grant a user extra rights with
+`npm run user -- perm <username> --view-presence on --view-team on --edit-own on|off` (defaults: edit-own on, the two
+visibility rights off). Explain to the user, briefly, that corrections made by someone else are recorded in a change log
+and notify the person concerned, and point them to the privacy section of `docs/team.md` (inform the employees; this is
+not legal advice).
+
 Hand each person their username and password through a private channel. Per-account rules that have no CLI
 flag (working days, daily target different from the instance default, rest-day rule, balance start date and
-carried-over balance) are set by each user on the Settings page, or by an admin through
+carried-over balance) are set by each user on the Settings page, or by an owner or admin through
 `PATCH /api/admin/users/:id` with `{ "settings": { "workdays": [1,2,3,4], "dailyTargetMin": 480 } }`
 (see `docs/api.md`).
 
@@ -150,6 +160,13 @@ page.
 Demo data, if the user wants to try the app first: a separate account, then
 `npm run user -- seed-demo demo` (three months of synthetic punches, leave and anomalies; `--months <n>` up to 24).
 Never seed a real person's account; remove the demo one later with `npm run user -- remove demo --yes`.
+
+To try the **team features** (Team page, presence, change log, notifications), offer `npm run user -- demo-team`
+(same target flag): it creates `alice` (superadmin, or admin if an owner already exists), `bruno` (admin), `chloe` (user
+who sees presence) and `david` (user who cannot edit) with demo data, prints the passwords once and leaves a pending
+notification for chloe. Suggest a normal window for alice and a private window for chloe. Remove them afterwards with
+`remove <name> --yes` (the last active owner is protected: remove alice last). Do not run it on an instance with real
+accounts unless the user asks.
 
 ## 6. Punching from a phone or badge reader
 
@@ -169,7 +186,7 @@ badge readers `docs/integrations/`. The Settings page shows the same guide in th
 
 ## 7. Wrap up
 
-Give the user a short summary: URL, admin username (not the password), where the secret is stored, how to add
+Give the user a short summary: URL, superadmin username (not the password), where the secret is stored, how to add
 accounts, how to update (`git pull` then redeploy: `npm run deploy` with `npm run db:migrate:remote` first if
 `migrations/` changed; Node: `npm run build:node` then restart; Docker: `docker compose up -d --build`), and
 how to back up the database.

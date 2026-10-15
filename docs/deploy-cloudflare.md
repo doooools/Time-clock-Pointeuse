@@ -53,7 +53,7 @@ Leave the other lines alone. In particular `"binding": "DB"` must stay as is: it
 npm run db:migrate:remote
 ```
 
-Answer `y` when Wrangler asks to apply the migrations (`0001_init.sql`, `0002_login_throttle.sql`…). Run the same command after any update that adds a migration
+Answer `y` when Wrangler asks to apply the migrations (`0001_init.sql`…). Run the same command after any update that adds a migration
 (see [Updating](#updating)).
 
 ## 4. Set the session secret
@@ -93,12 +93,12 @@ npm run deploy
 This builds the front end and the Worker, then publishes them. Wrangler prints the URL, of the form
 `https://opointeuse.<your-subdomain>.workers.dev`.
 
-## 7. Create the first admin account
+## 7. Create the first account (superadmin)
 
 A new instance has no account. Create the first one from your machine, aimed at the remote D1 database:
 
 ```bash
-npm run user -- add alice --admin --generate-password --d1-remote
+npm run user -- add alice --generate-password --d1-remote
 ```
 
 The command prints the generated password and the webhook token **once**. Then open the URL and sign in. More
@@ -156,7 +156,7 @@ Migrations are applied once each, in order, and tracked by Wrangler. Take a back
 ```bash
 cp .dev.vars.example .dev.vars   # then edit SESSION_SECRET
 npm run db:migrate:local         # local D1 database
-npm run user -- add demo --admin --generate-password --d1-local
+npm run user -- add demo --generate-password --d1-local
 npm run user -- seed-demo demo --d1-local   # optional: three months of demo data
 npm run dev                      # http://localhost:5173
 ```

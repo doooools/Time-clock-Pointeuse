@@ -40,6 +40,8 @@ environment variables.
 | Session cookie | `opointeuse_session`, HttpOnly, SameSite=Lax, Secure over HTTPS, 90 days |
 | Login lockout | 10 consecutive wrong passwords lock the account's password checks for 15 min (`429` + `Retry-After`); sessions and the webhook keep working |
 | Failed login delay | about 800 ms per failure |
+| Roles and rights | `owner` / `admin` / `user` and the rights `edit-own` (on), `view-presence` (off), `view-team` (off) are stored per account, not configured by environment; authorization is decided on the server ([team.md](team.md)) |
+| Change log and notifications | always on, written after each correction or account change; never purged automatically ([team.md](team.md#change-log-and-notifications)) |
 | API request body | 1 MiB at most (`413`); must be JSON (`415`) |
 | Cross-site requests | refused when the browser's `Sec-Fetch-Site` is not `same-origin` (`403`); webhook exempt |
 | Passwords | 8 to 1024 characters, PBKDF2-SHA256 with 100 000 iterations |
@@ -68,7 +70,7 @@ replaced from the Settings page, `POST /api/me/webhook-token` or `npm run user -
 
 ## Account settings
 
-Each account stores only the settings it changed; everything else follows the defaults. They are edited in the app
+Roles and visibility rights are not settings: see [team.md](team.md). Each account stores only the settings it changed; everything else follows the defaults. They are edited in the app
 (Settings), through `PUT /api/settings` ([api.md](api.md#settings)), or at account creation by the CLI
 ([users.md](users.md)).
 

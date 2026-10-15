@@ -34,15 +34,15 @@ variables are listed in [configuration.md](configuration.md#environment-variable
 (default `0.0.0.0`), `DATABASE_PATH` (`./data/opointeuse.db` in `.env.example`) and the optional `DEFAULT_*`
 instance defaults.
 
-## 3. Create the first admin
+## 3. Create the first account (superadmin)
 
 ```bash
-npm run user -- add alice --admin --generate-password
+npm run user -- add alice --generate-password
 ```
 
 It prints the password and the webhook token once. The CLI reads `.env` from the current directory and uses
 `DATABASE_PATH` (it creates and migrates the file if needed); `--db <file>` overrides it. With only `dist/` on the
-server, use the bundled copy: `node dist/server/cli.mjs add alice --admin --generate-password`. See
+server, use the bundled copy: `node dist/server/cli.mjs add alice --generate-password`. See
 [users.md](users.md).
 
 **Just trying it out?** Add a demo account filled with three months of realistic synthetic punches:

@@ -25,8 +25,11 @@ l'application web affiche votre solde d'heures en temps réel.** Elle est pensé
   doublons probables ; marquages de journée (congé, maladie, férié, RTT / récupération, jour travaillé, demi-journées).
 - **Statistiques** : semaines, mois, heures d'arrivée et de départ, pauses du midi, calendrier en couleurs.
 - **Import / export** : collez des horodatages depuis un tableur ; export Excel ou CSV.
-- **Multi-comptes** : une personne seule (1 compte) ou une petite entreprise (N comptes) sur la même instance. Les
-  comptes se gèrent en ligne de commande et par une API d'administration (pas de page d'administration).
+- **Multi-comptes et gestion d'équipe** : une personne seule (1 compte) ou une petite entreprise (N comptes) sur la
+  même instance. Trois rôles (superadmin, admin, utilisateur) et des droits par compte ; une **page Équipe** pour
+  ajouter des personnes, voir **qui est présent** et consulter ou corriger les heures des collègues ; un **journal des
+  modifications** de toute correction faite par un tiers, avec des **notifications persistantes** que la personne doit
+  acquitter. Une personne seule n'en voit rien. Voir [docs/team.md](docs/team.md) (en anglais).
 - **Français et anglais**, au choix de chaque utilisateur.
 - **Jours fériés** pour 14 régions (France, Alsace-Moselle, Belgique, Luxembourg, Suisse, Canada, Québec, Allemagne,
   Angleterre et Pays de Galles, États-Unis, Espagne, Italie, Pays-Bas, Portugal), ou aucun. N'importe quel **fuseau
@@ -44,7 +47,7 @@ depuis une date de départ choisie). Détails : [docs/configuration.md](docs/con
 
 ## Démarrage rapide
 
-Choisissez une cible. Chacune se termine par la création du premier compte administrateur, puis vous vous connectez
+Choisissez une cible. Chacune se termine par la création du premier compte, qui devient **superadmin** (propriétaire), puis vous vous connectez
 depuis la page d'accueil. Générez d'abord un secret : `openssl rand -hex 32` (toute chaîne aléatoire de 32 caractères
 ou plus convient).
 
@@ -57,7 +60,7 @@ git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
 npm ci
 npm run build:node
 cp .env.example .env            # puis renseignez SESSION_SECRET dans .env
-npm run user -- add alice --admin --generate-password
+npm run user -- add alice --generate-password
 npm start                       # http://localhost:3000
 ```
 
@@ -69,7 +72,7 @@ Suite : [docs/deploy-node.md](docs/deploy-node.md) (systemd, Caddy / nginx, sauv
 git clone https://github.com/<owner>/opointeuse.git && cd opointeuse
 echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
 docker compose up -d --build    # http://localhost:3000
-docker compose exec opointeuse node dist/server/cli.mjs add alice --admin --generate-password
+docker compose exec opointeuse node dist/server/cli.mjs add alice --generate-password
 ```
 
 Suite : [docs/deploy-docker.md](docs/deploy-docker.md).
@@ -84,7 +87,7 @@ npx wrangler d1 create opointeuse        # collez le database_id dans wrangler.j
 npm run db:migrate:remote
 npx wrangler secret put SESSION_SECRET
 npm run deploy
-npm run user -- add alice --admin --generate-password --d1-remote
+npm run user -- add alice --generate-password --d1-remote
 ```
 
 Suite : [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
@@ -96,6 +99,7 @@ Suite : [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
 2. Copiez votre **URL de webhook** et configurez votre téléphone ou votre lecteur :
    [docs/integrations/](docs/integrations/README.md).
 3. Importez éventuellement votre historique depuis la page **Données**.
+4. Pour une équipe, ouvrez la page **Équipe** pour ajouter des personnes ([docs/team.md](docs/team.md)).
 
 ### Essayer avec des données de démo
 
@@ -110,6 +114,21 @@ npm run user -- seed-demo demo                  # Cloudflare : ajoutez --d1-remo
 Connectez-vous en tant que `demo`, puis supprimez-le plus tard avec `npm run user -- remove demo --yes`. Détails :
 [docs/users.md](docs/users.md).
 
+### Essayer avec une équipe de démo
+
+Pour voir les fonctions d'équipe, `demo-team` crée quatre comptes avec trois mois de données fictives chacun : `alice`
+(superadmin), `bruno` (admin), `chloe` (utilisatrice qui voit qui est présent) et `david` (utilisateur qui ne peut pas
+modifier ses pointages). Les mots de passe sont affichés une seule fois.
+
+```bash
+npm run user -- demo-team       # Docker : docker compose exec opointeuse node dist/server/cli.mjs demo-team
+```
+
+Connectez-vous en tant qu'`alice` dans une fenêtre normale et en tant que `chloe` dans une fenêtre privée pour voir les
+deux points de vue : chloe a une notification en attente (correction faite « en ligne de commande » sur son dernier
+pointage), alice voit la page Équipe et le journal. Supprimez ensuite les quatre comptes avec `remove … --yes`. Détails :
+[docs/users.md](docs/users.md#demo-team-options).
+
 ## Avec Claude Code
 
 Inutile de suivre les guides à la main. Donnez le lien du dépôt à [Claude Code](https://claude.com/claude-code) avec
@@ -118,8 +137,8 @@ les autres agents via `AGENTS.md`) et un skill de mise en place guidée (`.claud
 Code d'« installer Opointeuse », il pose les quelques questions utiles (cible, équipe, fuseau, fériés, horaires),
 puis exécute les étapes en demandant confirmation avant toute action irréversible. Exemples de demandes :
 
-- « Voici le dépôt : `https://github.com/<owner>/opointeuse`. Déploie-le sur mon compte Cloudflare, crée-moi un
-  compte administrateur, fuseau Europe/Paris, jours fériés français. »
+- « Voici le dépôt : `https://github.com/<owner>/opointeuse`. Déploie-le sur mon compte Cloudflare, crée-moi le
+  premier compte, fuseau Europe/Paris, jours fériés français. »
 - « Installe-le avec Docker sur mon serveur maison derrière Caddy, pour une équipe de 6 personnes, interface en
   français. »
 - « Ajoute une région de jours fériés pour le canton de Genève. »
@@ -136,6 +155,7 @@ Commencez par [CLAUDE.md](CLAUDE.md), [docs/architecture.md](docs/architecture.m
 | [docs/README.md](docs/README.md) | Index de la documentation |
 | [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md) · [deploy-node.md](docs/deploy-node.md) · [deploy-docker.md](docs/deploy-docker.md) | Guides de déploiement |
 | [docs/configuration.md](docs/configuration.md) | Variables d'environnement, réglages de compte, régions de fériés |
+| [docs/team.md](docs/team.md) | Gestion d'équipe : rôles, droits, page Équipe, journal, confidentialité |
 | [docs/users.md](docs/users.md) | Gestion des comptes en ligne de commande |
 | [docs/api.md](docs/api.md) | Référence de l'API REST |
 | [docs/integrations/](docs/integrations/README.md) | Android, iPhone, HTTP, lecteur de badge |
@@ -154,7 +174,7 @@ npm run typecheck
 ```
 
 Pour `npm run dev`, copiez `.dev.vars.example` en `.dev.vars` et lancez une fois `npm run db:migrate:local`, puis
-créez un compte local : `npm run user -- add demo --admin --d1-local --generate-password` (et
+créez un compte local : `npm run user -- add demo --d1-local --generate-password` (et
 `npm run user -- seed-demo demo --d1-local` pour des données de démo).
 
 ## Licence
