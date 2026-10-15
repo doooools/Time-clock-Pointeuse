@@ -1,4 +1,4 @@
-# Opointeuse
+# Pointeuse
 
 [![CI](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml/badge.svg)](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml)
 [![Licence : Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
@@ -74,7 +74,7 @@ Suite : [docs/deploy-node.md](docs/deploy-node.md) (systemd, Caddy / nginx, sauv
 git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
 docker compose up -d --build    # http://localhost:3000
-docker compose exec opointeuse node dist/server/cli.mjs add alice --generate-password
+docker compose exec time-clock-pointeuse node dist/server/cli.mjs add alice --generate-password
 ```
 
 Suite : [docs/deploy-docker.md](docs/deploy-docker.md).
@@ -85,7 +85,7 @@ Suite : [docs/deploy-docker.md](docs/deploy-docker.md).
 git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 npx wrangler login
-npx wrangler d1 create opointeuse        # collez le database_id dans wrangler.jsonc
+npx wrangler d1 create time-clock-pointeuse        # collez le database_id dans wrangler.jsonc
 npm run db:migrate:remote
 npx wrangler secret put SESSION_SECRET
 npm run deploy
@@ -109,7 +109,7 @@ Envie de voir l'application remplie avant de pointer pour de vrai ? Créez un co
 mois de pointages fictifs, des congés et quelques anomalies :
 
 ```bash
-npm run user -- add demo --generate-password    # Docker : docker compose exec opointeuse node dist/server/cli.mjs …
+npm run user -- add demo --generate-password    # Docker : docker compose exec time-clock-pointeuse node dist/server/cli.mjs …
 npm run user -- seed-demo demo                  # Cloudflare : ajoutez --d1-remote aux deux commandes
 ```
 
@@ -123,7 +123,7 @@ Pour voir les fonctions d'équipe, `demo-team` crée quatre comptes avec trois m
 modifier ses pointages). Les mots de passe sont affichés une seule fois.
 
 ```bash
-npm run user -- demo-team       # Docker : docker compose exec opointeuse node dist/server/cli.mjs demo-team
+npm run user -- demo-team       # Docker : docker compose exec time-clock-pointeuse node dist/server/cli.mjs demo-team
 ```
 
 Connectez-vous en tant qu'`alice` dans une fenêtre normale et en tant que `chloe` dans une fenêtre privée pour voir les
@@ -136,7 +136,7 @@ pointage), alice voit la page Équipe et le journal. Supprimez ensuite les quatr
 Inutile de suivre les guides à la main. Donnez le lien du dépôt à [Claude Code](https://claude.com/claude-code) avec
 vos besoins, et laissez-le faire l'installation et les modifications. Le dépôt contient un `CLAUDE.md` (lu aussi par
 les autres agents via `AGENTS.md`) et un skill de mise en place guidée (`.claude/skills/setup/`) : demandez à Claude
-Code d'« installer Opointeuse », il pose les quelques questions utiles (cible, équipe, fuseau, fériés, horaires),
+Code d'« installer Pointeuse », il pose les quelques questions utiles (cible, équipe, fuseau, fériés, horaires),
 puis exécute les étapes en demandant confirmation avant toute action irréversible. Exemples de demandes :
 
 - « Voici le dépôt : `https://github.com/doooools/Time-clock-Pointeuse`. Déploie-le sur mon compte Cloudflare, crée-moi le

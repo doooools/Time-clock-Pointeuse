@@ -1,7 +1,7 @@
 # Team management
 
-A guide for the person who runs Opointeuse for a team: who can do what, how to add people, what each person sees,
-how corrections are recorded, and what to tell your employees. If you use Opointeuse alone, you can skip all of it:
+A guide for the person who runs Time clock for a team: who can do what, how to add people, what each person sees,
+how corrections are recorded, and what to tell your employees. If you use Time clock alone, you can skip all of it:
 with a single account none of the team screens appears.
 
 The same rights are enforced by the server whatever the client (web app, API, command line); the interface only hides

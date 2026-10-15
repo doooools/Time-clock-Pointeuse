@@ -1,6 +1,6 @@
 # Deploying on a Node server
 
-Opointeuse runs as a single Node process that serves the API and the web front end, with a SQLite database in one
+Time clock runs as a single Node process that serves the API and the web front end, with a SQLite database in one
 file. No native dependency, no external database. Suitable for a laptop, a home server or a small VPS.
 
 **Requirements**: Node **≥ 22.13** (the built-in `node:sqlite` module is used) and `git`. Check with `node -v`.
@@ -31,7 +31,7 @@ openssl rand -hex 32          # copy the output into SESSION_SECRET=
 
 The server reads `.env` from the current directory at startup; variables already present in the environment win. All
 variables are listed in [configuration.md](configuration.md#environment-variables): `PORT` (default 3000), `HOST`
-(default `0.0.0.0`), `DATABASE_PATH` (`./data/opointeuse.db` in `.env.example`) and the optional `DEFAULT_*`
+(default `0.0.0.0`), `DATABASE_PATH` (`./data/time-clock-pointeuse.db` in `.env.example`) and the optional `DEFAULT_*`
 instance defaults.
 
 ## 3. Create the first account (superadmin)
@@ -69,36 +69,36 @@ needed, and applies the migrations (once each) at every startup. Open <http://lo
 
 ## 5. Keep it running: systemd
 
-`/etc/systemd/system/opointeuse.service` (adapt the user and paths):
+`/etc/systemd/system/time-clock-pointeuse.service` (adapt the user and paths):
 
 ```ini
 [Unit]
-Description=Opointeuse time clock
+Description=Time clock
 After=network.target
 
 [Service]
 Type=simple
-User=opointeuse
-WorkingDirectory=/opt/opointeuse
-EnvironmentFile=/opt/opointeuse/.env
+User=time-clock-pointeuse
+WorkingDirectory=/opt/time-clock-pointeuse
+EnvironmentFile=/opt/time-clock-pointeuse/.env
 ExecStart=/usr/bin/node dist/server/index.mjs
 Restart=on-failure
 RestartSec=3
 # Hardening (optional)
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/opointeuse/data
+ReadWritePaths=/opt/time-clock-pointeuse/data
 
 [Install]
 WantedBy=multi-user.target
 ```
 
 ```bash
-sudo useradd --system --home /opt/opointeuse opointeuse
-sudo chown -R opointeuse: /opt/opointeuse
+sudo useradd --system --home /opt/time-clock-pointeuse time-clock-pointeuse
+sudo chown -R time-clock-pointeuse: /opt/time-clock-pointeuse
 sudo systemctl daemon-reload
-sudo systemctl enable --now opointeuse
-journalctl -u opointeuse -f
+sudo systemctl enable --now time-clock-pointeuse
+journalctl -u time-clock-pointeuse -f
 ```
 
 Check the Node path with `which node`. With a version manager (nvm, fnm), use the absolute path of the binary it
@@ -109,7 +109,7 @@ installed.
 Do not expose the Node port directly to the Internet. Put a reverse proxy in front: it handles HTTPS and compression,
 which the Node server does not do. Over plain HTTP the login cookie and the webhook token travel in clear text.
 
-**The proxy must send `X-Forwarded-Proto`.** Opointeuse uses it to mark the session cookie `Secure` when the original
+**The proxy must send `X-Forwarded-Proto`.** Time clock uses it to mark the session cookie `Secure` when the original
 request was HTTPS. Without it the cookie is not `Secure`.
 
 Set `HOST=127.0.0.1` in `.env` when the proxy runs on the same machine, so the app is reachable only through it.
@@ -150,12 +150,12 @@ server {
     }
     # Optional: per-IP rate limit on logins (zone defined below, in the http block)
     location = /api/login {
-        limit_req zone=opointeuse_login burst=10 nodelay;
+        limit_req zone=time_clock_pointeuse_login burst=10 nodelay;
         proxy_pass http://127.0.0.1:3000;
     }
 }
-# In the http { } block (e.g. /etc/nginx/conf.d/opointeuse-limits.conf):
-limit_req_zone $binary_remote_addr zone=opointeuse_login:10m rate=20r/m;
+# In the http { } block (e.g. /etc/nginx/conf.d/time-clock-pointeuse-limits.conf):
+limit_req_zone $binary_remote_addr zone=time_clock_pointeuse_login:10m rate=20r/m;
 
 server {
     listen 80;
@@ -177,24 +177,24 @@ server {
 
 ## 7. Back up
 
-The whole state is the SQLite file (`DATABASE_PATH`, default `data/opointeuse.db`). The database runs in WAL mode,
-so next to it you may see `opointeuse.db-wal` and `-shm` files: copying only the `.db` file while the server is
+The whole state is the SQLite file (`DATABASE_PATH`, default `data/time-clock-pointeuse.db`). The database runs in WAL mode,
+so next to it you may see `time-clock-pointeuse.db-wal` and `-shm` files: copying only the `.db` file while the server is
 running can give an inconsistent copy. Use one of:
 
 ```bash
 # Safe while the server is running (needs the sqlite3 command-line tool)
-sqlite3 data/opointeuse.db ".backup 'backup/opointeuse-$(date +%F).db'"
+sqlite3 data/time-clock-pointeuse.db ".backup 'backup/time-clock-pointeuse-$(date +%F).db'"
 
 # Or stop the app, copy, restart
-sudo systemctl stop opointeuse
-cp data/opointeuse.db* backup/
-sudo systemctl start opointeuse
+sudo systemctl stop time-clock-pointeuse
+cp data/time-clock-pointeuse.db* backup/
+sudo systemctl start time-clock-pointeuse
 ```
 
 Schedule it with cron, for example daily at 03:00:
 
 ```cron
-0 3 * * * sqlite3 /opt/opointeuse/data/opointeuse.db ".backup '/var/backups/opointeuse/opointeuse-$(date +\%F).db'"
+0 3 * * * sqlite3 /opt/time-clock-pointeuse/data/time-clock-pointeuse.db ".backup '/var/backups/time-clock-pointeuse/time-clock-pointeuse-$(date +\%F).db'"
 ```
 
 To restore: stop the app, put the backup file at `DATABASE_PATH` (delete any leftover `-wal` and `-shm` files),
@@ -203,11 +203,11 @@ start the app.
 ## 8. Update
 
 ```bash
-cd /opt/opointeuse
+cd /opt/time-clock-pointeuse
 git pull
 npm ci
 npm run build:node
-sudo systemctl restart opointeuse
+sudo systemctl restart time-clock-pointeuse
 ```
 
 New migrations are applied automatically at startup. Back up before a major update.

@@ -1,6 +1,6 @@
 # Punch integrations
 
-Opointeuse records a punch whenever its **webhook** is called. Anything that can send an HTTP request can
+Time clock records a punch whenever its **webhook** is called. Anything that can send an HTTP request can
 punch: an Android phone with an NFC tag, an iPhone shortcut, a `curl` command, Home Assistant, or a wall-mounted
 badge reader.
 

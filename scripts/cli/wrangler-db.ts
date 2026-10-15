@@ -67,7 +67,7 @@ export function wranglerRunner(options: { database: string; remote: boolean; cwd
     if (sql.length <= COMMAND_MAX && !sql.includes("\n")) {
       output = await spawnWrangler([...base, "--command", sql], cwd);
     } else {
-      const dir = mkdtempSync(join(tmpdir(), "opointeuse-cli-"));
+      const dir = mkdtempSync(join(tmpdir(), "time-clock-pointeuse-cli-"));
       const file = join(dir, "script.sql");
       try {
         writeFileSync(file, sql);

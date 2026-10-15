@@ -1,6 +1,6 @@
 # Architecture
 
-How Opointeuse works and why it is built this way. For step-by-step changes see
+How Time clock works and why it is built this way. For step-by-step changes see
 [customization.md](customization.md); for the condensed agent view see [../CLAUDE.md](../CLAUDE.md).
 
 ## Overview
@@ -209,7 +209,7 @@ Regional or one-off holidays not covered are entered as `holiday` day marks.
   `clearLoginFailures`. The lock is also lifted by a new password (`setPassword`), the admin API (`unlock: true`)
   and the CLI (`unlock`, `enable`, `passwd`). Unknown usernames are never locked; sessions and the webhook are never
   affected.
-- **Session cookie** `opointeuse_session` = `<userId>.<sessionVersion>.<exp>.<HMAC-SHA256>` signed with
+- **Session cookie** `time_clock_pointeuse_session` = `<userId>.<sessionVersion>.<exp>.<HMAC-SHA256>` signed with
   `SESSION_SECRET` (≥ 32 chars), httpOnly, `SameSite=Lax`, `Secure` over HTTPS, 90 days. `requireSession`
   verifies the signature and expiry, **reloads the user** and rejects a disabled account or a different
   `session_version`. Changing a password, an admin password reset or disabling an account bumps
@@ -272,9 +272,9 @@ Mounted in `server/app.ts`, identical on every runtime:
 
 | Target | Build | Runs | Database | Static files |
 |---|---|---|---|---|
-| Cloudflare Workers | `npm run build` (Vite + `@cloudflare/vite-plugin`) | `wrangler deploy`, entry `server/entry/cloudflare.ts` | D1 `opointeuse` (`wrangler.jsonc`) | Workers assets (`dist/client`, SPA fallback, `/api/*` to the worker first), headers from `public/_headers` |
+| Cloudflare Workers | `npm run build` (Vite + `@cloudflare/vite-plugin`) | `wrangler deploy`, entry `server/entry/cloudflare.ts` | D1 `time-clock-pointeuse` (`wrangler.jsonc`) | Workers assets (`dist/client`, SPA fallback, `/api/*` to the worker first), headers from `public/_headers` |
 | Node | `npm run build:node` = `vite build --mode node` (no Cloudflare plugin) + esbuild bundle | `node dist/server/index.mjs` | SQLite file `DATABASE_PATH` (WAL, foreign keys on) | `server/node/assets.ts` (SPA fallback, ETag, 1-year cache on `/assets/*`), headers from `securityHeaders` |
-| Docker | same as Node, in a `node:24-slim` build stage | `node:24-alpine`, non-root, `dist/` only | `/data/opointeuse.db` (volume) | same as Node |
+| Docker | same as Node, in a `node:24-slim` build stage | `node:24-alpine`, non-root, `dist/` only | `/data/time-clock-pointeuse.db` (volume) | same as Node |
 | Dev | `npm run dev` (Vite + workerd) | local | local D1 (`.wrangler/`) | Vite |
 
 - The Node bundle inlines every npm dependency and embeds `migrations/*.sql`, so the runtime needs only Node

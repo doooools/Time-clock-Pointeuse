@@ -30,4 +30,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t opointeuse:ci .
+      - run: docker build -t time-clock-pointeuse:ci .

@@ -1,6 +1,6 @@
-# Customizing Opointeuse
+# Customizing Time clock
 
-This guide explains how to adapt Opointeuse to your needs, from simple configuration to code changes. Each
+This guide explains how to adapt Time clock to your needs, from simple configuration to code changes. Each
 recipe says which files to touch, in which order, and how to check the result. For how the pieces fit together,
 read [architecture.md](architecture.md) first; [../CLAUDE.md](../CLAUDE.md) has the same recipes in condensed
 form for AI coding agents.
@@ -44,7 +44,7 @@ The same CLI lists, adds, disables and removes accounts, resets passwords, unloc
 passwords, shows or regenerates webhook tokens, imports history and can fill a demo account with synthetic data
 (`seed-demo`, `demo-team`) and changes roles and rights (`role`, `perm`). It works on a SQLite file (`--db`, or `DATABASE_PATH`), on the local Cloudflare D1 (`--d1-local`) and on
 the production D1 (`--d1-remote`). In Docker, use the bundled copy:
-`docker compose exec opointeuse node dist/server/cli.mjs list`. Full reference: `docs/users.md`.
+`docker compose exec time-clock-pointeuse node dist/server/cli.mjs list`. Full reference: `docs/users.md`.
 
 Once someone is signed in, owners and admins manage the other accounts from the **Team page** (create, rights, password
 reset, token, disable, delete), which uses the admin API (`/api/admin/users`, described in `docs/api.md`). Roles, rights,

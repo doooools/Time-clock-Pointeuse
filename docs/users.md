@@ -28,7 +28,7 @@ disabled or removed.
 |---|---|
 | From the source tree (Node, development) | `npm run user -- <command> [options]` |
 | From a Node build (`npm run build:node`) | `node dist/server/cli.mjs <command> [options]` |
-| Docker | `docker compose exec opointeuse node dist/server/cli.mjs <command> [options]` |
+| Docker | `docker compose exec time-clock-pointeuse node dist/server/cli.mjs <command> [options]` |
 
 (The `--` after `npm run user` separates npm's options from the tool's. A leading word `user` before the command is
 accepted and ignored.) The examples below use the first form.
@@ -40,10 +40,10 @@ Every command acts on one database:
 | Option | Target |
 |---|---|
 | `--db <path>` | A SQLite file (Node, Docker). Migrations are applied automatically. |
-| *(none)* | The file in `DATABASE_PATH` (environment or `.env`), otherwise `./data/opointeuse.db` if it exists. Docker sets `DATABASE_PATH` for you. |
+| *(none)* | The file in `DATABASE_PATH` (environment or `.env`), otherwise `./data/time-clock-pointeuse.db` if it exists. Docker sets `DATABASE_PATH` for you. |
 | `--d1-local` | The local Cloudflare D1 database used by `npm run dev` (run `npm run db:migrate:local` first). |
 | `--d1-remote` | Your production D1 database (run `npm run db:migrate:remote` first). Requires `npx wrangler login`. |
-| `--d1-name <name>` | With `--d1-local` / `--d1-remote`: the D1 database name, if it is not `opointeuse`. |
+| `--d1-name <name>` | With `--d1-local` / `--d1-remote`: the D1 database name, if it is not `time-clock-pointeuse`. |
 
 D1 commands go through `wrangler d1 execute`, so they work from your own machine against Cloudflare. They are a
 little slower than SQLite ones.
@@ -85,7 +85,7 @@ settings keep the instance defaults unless given here; the user can change them 
 
 ```bash
 npm run user -- add alice --name "Alice Martin" --locale fr --timezone Europe/Paris --holidays FR --generate-password
-npm run user -- add bob --generate-password --db ./data/opointeuse.db
+npm run user -- add bob --generate-password --db ./data/time-clock-pointeuse.db
 npm run user -- add carol --admin --generate-password --d1-remote   # a second account, as admin
 ```
 
@@ -229,7 +229,7 @@ login and webhook URL (Settings → webhook). For a shared wall reader see
 
 **Someone left**: `disable <username>` to keep their history, or `remove <username>` to erase it.
 
-**Lost the only superadmin password**: `passwd <owner>` from the server; the CLI needs access to the database, not to the
+**Lost the only superadmin password**: `passwd <username>` from the server; the CLI needs access to the database, not to the
 app.
 
 ## Local development seed

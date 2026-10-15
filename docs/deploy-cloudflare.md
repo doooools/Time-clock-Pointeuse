@@ -1,6 +1,6 @@
 # Deploying on Cloudflare Workers + D1
 
-Opointeuse runs as one Worker (API + static front end) with a D1 database (SQLite managed by Cloudflare). It fits
+Time clock runs as one Worker (API + static front end) with a D1 database (SQLite managed by Cloudflare). It fits
 comfortably in Cloudflare's free tier for a person or a small team.
 
 **You need**: a free Cloudflare account, Node ≥ 22.13 and the repository cloned on your machine.
@@ -23,7 +23,7 @@ A browser window opens to authorise Wrangler.
 ## 2. Create the database
 
 ```bash
-npx wrangler d1 create opointeuse
+npx wrangler d1 create time-clock-pointeuse
 ```
 
 The command prints a block like this (your `database_id` will differ):
@@ -31,7 +31,7 @@ The command prints a block like this (your `database_id` will differ):
 ```jsonc
 {
   "d1_databases": [
-    { "binding": "opointeuse", "database_name": "opointeuse", "database_id": "3f2a9c1e-…" }
+    { "binding": "time-clock-pointeuse", "database_name": "time-clock-pointeuse", "database_id": "3f2a9c1e-…" }
   ]
 }
 ```
@@ -91,7 +91,7 @@ npm run deploy
 ```
 
 This builds the front end and the Worker, then publishes them. Wrangler prints the URL, of the form
-`https://opointeuse.<your-subdomain>.workers.dev`.
+`https://time-clock-pointeuse.<your-subdomain>.workers.dev`.
 
 ## 7. Create the first account (superadmin)
 
@@ -149,7 +149,7 @@ npm run deploy
 ```
 
 Migrations are applied once each, in order, and tracked by Wrangler. Take a backup first if you want to be careful:
-`npx wrangler d1 export opointeuse --remote --output backup.sql`.
+`npx wrangler d1 export time-clock-pointeuse --remote --output backup.sql`.
 
 ## Local development
 
@@ -162,7 +162,7 @@ npm run dev                      # http://localhost:5173
 ```
 
 In development the front end has no CSP (`public/_headers` is not applied by Vite); to check the production headers
-locally, run `npm run build` then `npx wrangler dev -c dist/opointeuse/wrangler.json`.
+locally, run `npm run build` then `npx wrangler dev -c dist/time-clock-pointeuse/wrangler.json`.
 
 ## Costs
 
@@ -179,9 +179,9 @@ some CPU time at login; this is well within the free CPU budget for normal use.
 |---|---|
 | `/api/...` answers 500 "SESSION_SECRET is missing or shorter than 32 characters" | Run step 4. |
 | `D1_ERROR: no such table: users` | Run `npm run db:migrate:remote` (step 3). |
-| `Couldn't find a D1 DB with the name or binding 'opointeuse'` | The `database_id` in `wrangler.jsonc` is still the zero placeholder. |
+| `Couldn't find a D1 DB with the name or binding 'time-clock-pointeuse'` | The `database_id` in `wrangler.jsonc` is still the zero placeholder. |
 | Login impossible, no account | Create one (step 7). |
 | Login answers 429 "Too many failed attempts" | The account is locked for 15 min after 10 wrong passwords. Wait, or `npm run user -- unlock <username> --d1-remote`. |
 | An API call from a script answers 415 | Add `-H 'Content-Type: application/json'` to requests with a body. |
-| On Windows, `wrangler … --local` answers `internal error; reference=…` | The project path is very long: the local D1 file under `.wrangler/state/v3/d1/` exceeds the 260-character Windows path limit. Clone into a short path such as `C:\src\opointeuse`, or add `--persist-to <short path>`. |
+| On Windows, `wrangler … --local` answers `internal error; reference=…` | The project path is very long: the local D1 file under `.wrangler/state/v3/d1/` exceeds the 260-character Windows path limit. Clone into a short path such as `C:\src\time-clock-pointeuse`, or add `--persist-to <short path>`. |
 | Punches have the wrong day or hour | Set the account's time zone in Settings, or `DEFAULT_TIMEZONE`. |

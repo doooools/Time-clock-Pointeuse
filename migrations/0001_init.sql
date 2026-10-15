@@ -1,4 +1,4 @@
--- Opointeuse schema. Portable SQL: Cloudflare D1 and SQLite >= 3.35 (node:sqlite).
+-- Time clock schema. Portable SQL: Cloudflare D1 and SQLite >= 3.35 (node:sqlite).
 -- Foreign keys must be enabled on Node (PRAGMA foreign_keys = ON); D1 enables them by default.
 
 -- Accounts. Managed with the CLI (`npm run user`) or the admin API.

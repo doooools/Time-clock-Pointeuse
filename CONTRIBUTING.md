@@ -1,6 +1,6 @@
-# Contributing to Opointeuse
+# Contributing to Time clock
 
-Thanks for your interest! Opointeuse is a self-hosted time clock that runs on Cloudflare Workers + D1,
+Thanks for your interest! Time clock is a self-hosted time tracker that runs on Cloudflare Workers + D1,
 on a Node server, or in Docker.
 
 ## Setup

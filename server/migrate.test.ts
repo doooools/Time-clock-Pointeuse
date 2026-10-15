@@ -59,7 +59,7 @@ describe("applyMigrations", () => {
 
 describe("readMigrationsDir", () => {
   it("reads numbered .sql files sorted by name and ignores the rest", () => {
-    const dir = mkdtempSync(join(tmpdir(), "opointeuse-migrations-"));
+    const dir = mkdtempSync(join(tmpdir(), "time-clock-pointeuse-migrations-"));
     try {
       writeFileSync(join(dir, "0002_b.sql"), "SELECT 2;");
       writeFileSync(join(dir, "0001_a.sql"), "SELECT 1;");

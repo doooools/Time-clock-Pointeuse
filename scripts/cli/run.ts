@@ -39,7 +39,7 @@ const INSERT_CHUNK = 30;
 const YEAR_2000 = Date.UTC(2000, 0, 1);
 const YEAR_2200 = Date.UTC(2200, 0, 1);
 
-export const HELP = `Opointeuse accounts CLI
+export const HELP = `Time clock accounts CLI
 
 Usage:
   npm run user -- <command> [options]            (from sources)
@@ -79,9 +79,9 @@ Password options (add, passwd):
 ${TARGET_HELP}
 
 Examples:
-  npm run user -- add alice --db ./data/opointeuse.db
+  npm run user -- add alice --db ./data/time-clock-pointeuse.db
   npm run user -- add demo --d1-local --generate-password
-  docker compose exec opointeuse node dist/server/cli.mjs add alice`;
+  docker compose exec time-clock-pointeuse node dist/server/cli.mjs add alice`;
 
 /** Thrown for failures that are not usage mistakes (unknown user, last owner…). */
 export class CliError extends Error {}

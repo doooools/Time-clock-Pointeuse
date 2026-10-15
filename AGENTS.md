@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for AI coding agents working on Opointeuse live in **[CLAUDE.md](CLAUDE.md)**: repository map,
+Instructions for AI coding agents working on Time clock live in **[CLAUDE.md](CLAUDE.md)**: repository map,
 commands, invariants that must not break, conventions and step-by-step recipes (deploy, accounts, holiday
 regions, settings, languages, API routes, the Team page, computation rules, theme, migrations).
 

@@ -4,7 +4,7 @@
  * Follows the wrangler D1 convention: applied files are recorded by name in `d1_migrations`, each file runs
  * once, in lexical order, inside its own transaction. The same `migrations/` folder serves D1 and Node.
  *
- * Migration sources: the Node bundle embeds the SQL at build time (`__OPOINTEUSE_MIGRATIONS__`, see
+ * Migration sources: the Node bundle embeds the SQL at build time (`__TIME_CLOCK_POINTEUSE_MIGRATIONS__`, see
  * `server/node/build.ts`), so the artefact needs no `migrations/` folder at runtime (Docker). When running
  * from sources (tests, tsx), the folder is read from disk.
  */
@@ -14,7 +14,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 export type Migration = { name: string; sql: string };
 
-declare const __OPOINTEUSE_MIGRATIONS__: Migration[] | undefined;
+declare const __TIME_CLOCK_POINTEUSE_MIGRATIONS__: Migration[] | undefined;
 
 const MIGRATION_FILE = /^\d+.*\.sql$/;
 const byName = (a: Migration, b: Migration) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -29,7 +29,7 @@ export function readMigrationsDir(dir: string): Migration[] {
 
 /** Migrations embedded in the bundle, or read from `<cwd>/migrations` when running from sources. */
 export function bundledMigrations(): Migration[] {
-  if (typeof __OPOINTEUSE_MIGRATIONS__ !== "undefined") return __OPOINTEUSE_MIGRATIONS__;
+  if (typeof __TIME_CLOCK_POINTEUSE_MIGRATIONS__ !== "undefined") return __TIME_CLOCK_POINTEUSE_MIGRATIONS__;
   const dir = resolve("migrations");
   if (!existsSync(dir)) throw new Error(`Migrations folder not found: ${dir}`);
   return readMigrationsDir(dir);

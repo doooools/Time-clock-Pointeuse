@@ -1,9 +1,9 @@
 # Example deployment. Put SESSION_SECRET in a `.env` file next to this one (see .env.example), then:
 #   docker compose up -d --build
 services:
-  opointeuse:
+  time-clock-pointeuse:
     build: .
-    image: opointeuse:latest
+    image: time-clock-pointeuse:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -16,7 +16,7 @@ services:
       # DEFAULT_HOLIDAYS: FR               # public holidays region code, default none
       # DEFAULT_DAILY_TARGET_MIN: "420"    # daily target in minutes (420 = 7h00)
     volumes:
-      - opointeuse-data:/data
+      - time-clock-pointeuse-data:/data
 
 volumes:
-  opointeuse-data:
+  time-clock-pointeuse-data:

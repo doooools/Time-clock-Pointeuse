@@ -122,7 +122,7 @@ describe("createSqliteDb", () => {
 
 describe("createSqliteDb on a file", () => {
   it("uses WAL journaling and persists data across connections", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "opointeuse-sqlite-"));
+    const dir = mkdtempSync(join(tmpdir(), "time-clock-pointeuse-sqlite-"));
     try {
       const path = join(dir, "test.db");
       const first = createSqliteDb(path);

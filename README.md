@@ -1,4 +1,4 @@
-# Opointeuse
+# Time clock (Pointeuse)
 
 [![CI](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml/badge.svg)](https://github.com/doooools/Time-clock-Pointeuse/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -71,7 +71,7 @@ More: [docs/deploy-node.md](docs/deploy-node.md) (systemd, Caddy / nginx, backup
 git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
 docker compose up -d --build    # http://localhost:3000
-docker compose exec opointeuse node dist/server/cli.mjs add alice --generate-password
+docker compose exec time-clock-pointeuse node dist/server/cli.mjs add alice --generate-password
 ```
 
 More: [docs/deploy-docker.md](docs/deploy-docker.md).
@@ -82,7 +82,7 @@ More: [docs/deploy-docker.md](docs/deploy-docker.md).
 git clone https://github.com/doooools/Time-clock-Pointeuse.git && cd Time-clock-Pointeuse
 npm ci
 npx wrangler login
-npx wrangler d1 create opointeuse        # paste the database_id into wrangler.jsonc
+npx wrangler d1 create time-clock-pointeuse        # paste the database_id into wrangler.jsonc
 npm run db:migrate:remote
 npx wrangler secret put SESSION_SECRET
 npm run deploy
@@ -104,7 +104,7 @@ Want to see a populated app before punching for real? Create a separate account 
 synthetic punches, leave and a few anomalies:
 
 ```bash
-npm run user -- add demo --generate-password    # Docker: docker compose exec opointeuse node dist/server/cli.mjs …
+npm run user -- add demo --generate-password    # Docker: docker compose exec time-clock-pointeuse node dist/server/cli.mjs …
 npm run user -- seed-demo demo                  # Cloudflare: add --d1-remote to both commands
 ```
 
@@ -117,7 +117,7 @@ To see the team features, `demo-team` creates four accounts with three months of
 Passwords are printed once.
 
 ```bash
-npm run user -- demo-team       # Docker: docker compose exec opointeuse node dist/server/cli.mjs demo-team
+npm run user -- demo-team       # Docker: docker compose exec time-clock-pointeuse node dist/server/cli.mjs demo-team
 ```
 
 Sign in as `alice` in a normal window and as `chloe` in a private window to see both points of view: chloe has a
@@ -129,7 +129,7 @@ change log. Remove the four accounts afterwards with `remove … --yes`. Details
 You do not have to follow the guides by hand. Give the repository link to [Claude Code](https://claude.com/claude-code)
 together with what you need, and let it do the set-up and the changes. The repository contains `CLAUDE.md` (also
 read by other agents through `AGENTS.md`) and a guided set-up skill (`.claude/skills/setup/`): ask Claude Code to
-"set up Opointeuse" and it asks the few questions that matter (target, team, time zone, holidays, hours), then runs
+"set up Time clock" and it asks the few questions that matter (target, team, time zone, holidays, hours), then runs
 the steps, asking before anything irreversible. Examples:
 
 - "Here is the repo: `https://github.com/doooools/Time-clock-Pointeuse`. Deploy it on my Cloudflare account, create the

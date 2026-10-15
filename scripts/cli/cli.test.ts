@@ -122,7 +122,7 @@ function splitStatements(script: string): string[] {
 
 let dir: string;
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "opointeuse-cli-test-"));
+  dir = mkdtempSync(join(tmpdir(), "time-clock-pointeuse-cli-test-"));
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -474,7 +474,7 @@ describe("defaultSqlitePath", () => {
   it("prefers --db, then DATABASE_PATH, then the default file when it exists", () => {
     expect(defaultSqlitePath("a.db", { DATABASE_PATH: "b.db" }, () => true)).toBe("a.db");
     expect(defaultSqlitePath(undefined, { DATABASE_PATH: " b.db " }, () => true)).toBe("b.db");
-    expect(defaultSqlitePath(undefined, {}, () => true)).toBe("./data/opointeuse.db");
+    expect(defaultSqlitePath(undefined, {}, () => true)).toBe("./data/time-clock-pointeuse.db");
   });
 
   it("returns undefined when nothing applies", () => {

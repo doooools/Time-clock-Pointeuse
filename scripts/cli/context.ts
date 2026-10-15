@@ -9,7 +9,7 @@ import { WranglerDb, wranglerRunner } from "./wrangler-db";
 
 export type Target = {
   db: Db;
-  /** Human-readable description, e.g. "SQLite ./data/opointeuse.db". */
+  /** Human-readable description, e.g. "SQLite ./data/time-clock-pointeuse.db". */
   label: string;
   close(): void;
 };
@@ -31,15 +31,15 @@ export type Ctx = {
 export const TARGET_HELP = [
   "Choose the database to act on:",
   "  --db <path>     SQLite file (Node / Docker). Default: $DATABASE_PATH (also read from .env),",
-  "                  else ./data/opointeuse.db when that file exists.",
+  "                  else ./data/time-clock-pointeuse.db when that file exists.",
   "  --d1-local      Cloudflare D1 of the local dev environment (wrangler --local).",
   "  --d1-remote     Cloudflare D1 in production (wrangler --remote).",
-  "  (--d1-name <name> overrides the D1 database name, default \"opointeuse\".)",
+  "  (--d1-name <name> overrides the D1 database name, default \"time-clock-pointeuse\".)",
 ].join("\n");
 
 /**
  * SQLite file to use when no D1 option is given: `--db`, then `$DATABASE_PATH`, then the Node server's default
- * (`./data/opointeuse.db`) if it exists. Returns undefined when none applies.
+ * (`./data/time-clock-pointeuse.db`) if it exists. Returns undefined when none applies.
  */
 export function defaultSqlitePath(
   explicit: string | undefined,
@@ -61,7 +61,7 @@ export async function openTarget(args: ParsedArgs, env: Ctx["env"]): Promise<Tar
     throw new UsageError("Use only one of --db, --d1-local and --d1-remote.");
   }
   if (local || remote) {
-    const database = flagString(args, "d1-name") ?? "opointeuse";
+    const database = flagString(args, "d1-name") ?? "time-clock-pointeuse";
     return {
       db: new WranglerDb(wranglerRunner({ database, remote })),
       label: `Cloudflare D1 "${database}" (${remote ? "remote" : "local"})`,

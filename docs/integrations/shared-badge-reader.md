@@ -56,7 +56,7 @@ LEDs: green on GPIO 25, red on GPIO 26, each through a 220 Ω resistor to GND.
 > Expect to adjust pins and timings.
 
 ```cpp
-// Opointeuse shared badge reader: ESP32 + RC522.
+// Time clock shared badge reader: ESP32 + RC522.
 // EXAMPLE, NOT TESTED ON HARDWARE.
 #include <WiFi.h>
 #include <WiFiClientSecure.h>

@@ -119,7 +119,7 @@ describe("body size limit", () => {
     });
     const req = new Request("http://localhost/api/punches/bulk", {
       method: "POST",
-      headers: { ...JSON_HEADERS, cookie: `opointeuse_session=${bob.client.cookie}` },
+      headers: { ...JSON_HEADERS, cookie: `time_clock_pointeuse_session=${bob.client.cookie}` },
       body: stream,
       duplex: "half",
     } as RequestInit);

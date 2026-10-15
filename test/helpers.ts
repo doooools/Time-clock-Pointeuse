@@ -7,7 +7,7 @@ import { createUser, type Permissions } from "../server/users";
 import type { Settings } from "../shared/settings";
 
 export const SECRET = "test-secret-test-secret-test-secret-0123456789";
-export const SESSION_COOKIE = "opointeuse_session";
+export const SESSION_COOKIE = "time_clock_pointeuse_session";
 
 /** Stub of the static front end binding. */
 export const ASSETS: Env["ASSETS"] = {

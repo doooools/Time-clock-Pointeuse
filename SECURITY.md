@@ -3,8 +3,7 @@
 ## Reporting a vulnerability
 
 Please **do not open a public issue** for security problems. Report them privately using GitHub's
-"Report a vulnerability" feature (Security tab → Advisories) on this repository, or by email to
-`<contact email>`.
+"Report a vulnerability" feature (Security tab → Advisories) on this repository, or by contacting the maintainer, @doooools on GitHub (private report through the repository's Security tab).
 
 Include a description, reproduction steps and the affected version. You can expect an acknowledgement
 within a few days. Please allow reasonable time for a fix before any public disclosure.

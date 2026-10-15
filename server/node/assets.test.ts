@@ -10,18 +10,18 @@ let assets: AssetsBinding;
 const get = (path: string, init?: RequestInit) => assets.fetch(new Request(`http://localhost${path}`, init));
 
 beforeAll(() => {
-  root = mkdtempSync(join(tmpdir(), "opointeuse-assets-"));
+  root = mkdtempSync(join(tmpdir(), "time-clock-pointeuse-assets-"));
   mkdirSync(join(root, "assets"));
   writeFileSync(join(root, "index.html"), "<!doctype html><title>app</title>");
   writeFileSync(join(root, "assets", "index-abc123.js"), "console.log(1)");
   writeFileSync(join(root, "favicon.svg"), "<svg/>");
-  writeFileSync(join(root, "..", "opointeuse-assets-secret.txt"), "secret");
+  writeFileSync(join(root, "..", "time-clock-pointeuse-assets-secret.txt"), "secret");
   assets = createAssets(root);
 });
 
 afterAll(() => {
   rmSync(root, { recursive: true, force: true });
-  rmSync(join(root, "..", "opointeuse-assets-secret.txt"), { force: true });
+  rmSync(join(root, "..", "time-clock-pointeuse-assets-secret.txt"), { force: true });
 });
 
 describe("createAssets", () => {
@@ -77,7 +77,7 @@ describe("createAssets", () => {
   });
 
   it("never serves files outside the root", async () => {
-    for (const path of ["/../opointeuse-assets-secret.txt", "/%2e%2e/opointeuse-assets-secret.txt", "/..%2fopointeuse-assets-secret.txt"]) {
+    for (const path of ["/../time-clock-pointeuse-assets-secret.txt", "/%2e%2e/time-clock-pointeuse-assets-secret.txt", "/..%2ftime-clock-pointeuse-assets-secret.txt"]) {
       const res = await get(path);
       expect(await res.text(), path).not.toContain("secret");
     }

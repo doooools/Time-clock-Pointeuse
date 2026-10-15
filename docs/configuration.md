@@ -17,7 +17,7 @@ Two levels of configuration:
 | `DEFAULT_DAILY_TARGET_MIN` | no | `420` | all | Daily target in minutes (`420` = 7h00, `438` = 7h18). Between 0 and 1440. |
 | `PORT` | no | `3000` | Node, Docker | TCP port to listen on. |
 | `HOST` | no | `0.0.0.0` | Node, Docker | Address to bind. Use `127.0.0.1` behind a reverse proxy on the same machine. |
-| `DATABASE_PATH` | no | `./data/opointeuse.db` | Node, Docker, CLI | SQLite file. Its folder is created if needed and migrations run at startup. Set in `.env.example`; in Docker it is `/data/opointeuse.db`. The accounts CLI uses it too (then `./data/opointeuse.db` if that file exists). |
+| `DATABASE_PATH` | no | `./data/time-clock-pointeuse.db` | Node, Docker, CLI | SQLite file. Its folder is created if needed and migrations run at startup. Set in `.env.example`; in Docker it is `/data/time-clock-pointeuse.db`. The accounts CLI uses it too (then `./data/time-clock-pointeuse.db` if that file exists). |
 
 Invalid `DEFAULT_*` values are silently ignored (the built-in default applies).
 
@@ -37,7 +37,7 @@ environment variables.
 
 | What | Value |
 |---|---|
-| Session cookie | `opointeuse_session`, HttpOnly, SameSite=Lax, Secure over HTTPS, 90 days |
+| Session cookie | `time_clock_pointeuse_session`, HttpOnly, SameSite=Lax, Secure over HTTPS, 90 days |
 | Login lockout | 10 consecutive wrong passwords lock the account's password checks for 15 min (`429` + `Retry-After`); sessions and the webhook keep working |
 | Failed login delay | about 800 ms per failure |
 | Roles and rights | `owner` / `admin` / `user` and the rights `edit-own` (on), `view-presence` (off), `view-team` (off) are stored per account, not configured by environment; authorization is decided on the server ([team.md](team.md)) |

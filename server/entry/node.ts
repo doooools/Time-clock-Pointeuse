@@ -2,7 +2,7 @@
  * Node entry point (local machine, VPS, Docker): SQLite file database + built front served from disk.
  *
  * Configuration comes from the environment, optionally from `./.env` (see `.env.example`):
- * `SESSION_SECRET` (required), `PORT` (3000), `HOST` (0.0.0.0), `DATABASE_PATH` (./data/opointeuse.db)
+ * `SESSION_SECRET` (required), `PORT` (3000), `HOST` (0.0.0.0), `DATABASE_PATH` (./data/time-clock-pointeuse.db)
  * and the instance defaults `DEFAULT_*` passed to the app as-is.
  */
 import { serve } from "@hono/node-server";
@@ -15,7 +15,7 @@ const MIN_SECRET_LENGTH = 32;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 function fail(message: string): never {
-  console.error(`opointeuse: ${message}`);
+  console.error(`time-clock-pointeuse: ${message}`);
   process.exit(1);
 }
 
@@ -40,10 +40,10 @@ try {
   fail(`cannot open the database: ${err instanceof Error ? err.message : String(err)}`);
 }
 const { db, path: dbPath, applied } = opened;
-if (applied.length) console.log(`opointeuse: applied migrations ${applied.join(", ")}`);
+if (applied.length) console.log(`time-clock-pointeuse: applied migrations ${applied.join(", ")}`);
 
 const clientDir = findClientDir(import.meta.url);
-if (!clientDir) console.warn("opointeuse: front not built (no dist/client/index.html), only /api/* is served");
+if (!clientDir) console.warn("time-clock-pointeuse: front not built (no dist/client/index.html), only /api/* is served");
 const assets = clientDir
   ? createAssets(clientDir)
   : { fetch: async () => new Response("Front not built: run `npm run build:node`.", { status: 404 }) };
@@ -59,7 +59,7 @@ const env: Env = { ...defaults, DB: db, ASSETS: assets, SESSION_SECRET: secret }
 // Minimal ExecutionContext so code written for Workers (waitUntil) also runs here.
 const executionCtx = {
   waitUntil(promise: Promise<unknown>) {
-    promise.catch((err) => console.error("opointeuse: background task failed", err));
+    promise.catch((err) => console.error("time-clock-pointeuse: background task failed", err));
   },
   passThroughOnException() {},
   props: {},
@@ -80,9 +80,9 @@ const handle = (request: Request) => app.fetch(withForwardedProto(request), env,
 
 const server = serve({ fetch: handle, port, hostname: host }, (info) => {
   const shown = host === "0.0.0.0" || host === "::" ? "localhost" : host.includes(":") ? `[${host}]` : host;
-  console.log(`opointeuse: listening on http://${shown}:${info.port} (bound to ${host})`);
-  console.log(`opointeuse: database ${dbPath}`);
-  if (clientDir) console.log(`opointeuse: serving front from ${clientDir}`);
+  console.log(`time-clock-pointeuse: listening on http://${shown}:${info.port} (bound to ${host})`);
+  console.log(`time-clock-pointeuse: database ${dbPath}`);
+  if (clientDir) console.log(`time-clock-pointeuse: serving front from ${clientDir}`);
 });
 
 server.on("error", (err) => fail(`cannot listen on ${host}:${port}: ${err.message}`));
@@ -91,9 +91,9 @@ let stopping = false;
 function shutdown(signal: string) {
   if (stopping) return;
   stopping = true;
-  console.log(`opointeuse: ${signal} received, shutting down`);
+  console.log(`time-clock-pointeuse: ${signal} received, shutting down`);
   const timer = setTimeout(() => {
-    console.error("opointeuse: forced exit after timeout");
+    console.error("time-clock-pointeuse: forced exit after timeout");
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS);
   timer.unref();

@@ -39,7 +39,7 @@ use `https://time.example.com` as the base URL.
 
 ### Session cookie
 
-`POST /api/login` sets the cookie `opointeuse_session`: `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` when the
+`POST /api/login` sets the cookie `time_clock_pointeuse_session`: `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` when the
 request is HTTPS (behind a proxy: needs `X-Forwarded-Proto`, see [deploy-node.md](deploy-node.md)), valid 90 days.
 Its value is `<userId>.<sessionVersion>.<expiry>.<signature>` (HMAC-SHA256 with `SESSION_SECRET`). The account is
 reloaded on each request, so disabling an account, changing its password or an admin reset invalidates its sessions

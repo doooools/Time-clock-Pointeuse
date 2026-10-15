@@ -23,7 +23,7 @@ export function toLocale(tag: string | null | undefined): Locale {
   return tag && tag.toLowerCase().startsWith("fr") ? "fr" : "en";
 }
 
-const STORAGE_KEY = "opointeuse.locale";
+const STORAGE_KEY = "time-clock-pointeuse.locale";
 
 /** Language explicitly chosen on this device (login screen switch, or the last account language), if any. */
 export function savedLocale(): Locale | null {

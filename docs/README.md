@@ -1,4 +1,4 @@
-# Opointeuse documentation
+# Time clock documentation
 
 Start with the [README](../README.md) (also in French: [README.fr.md](../README.fr.md)) for the overview and the quick
 start.

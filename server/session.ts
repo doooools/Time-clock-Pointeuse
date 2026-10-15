@@ -1,7 +1,7 @@
 // Signed session tokens: `<userId>.<sessionVersion>.<exp>.<sig>`, where sig is the base64url
 // HMAC-SHA256 of `userId:sessionVersion:exp` with SESSION_SECRET. Pure WebCrypto, runtime independent.
 
-export const SESSION_COOKIE = "opointeuse_session";
+export const SESSION_COOKIE = "time_clock_pointeuse_session";
 export const SESSION_DAYS = 90;
 export const SESSION_MS = SESSION_DAYS * 86_400_000;
 export const MIN_SECRET_LENGTH = 32;

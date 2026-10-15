@@ -1,4 +1,4 @@
-# CLAUDE.md — Opointeuse
+# CLAUDE.md — Time clock
 
 Self-hosted time clock for one person or a small team. Users punch in/out from a phone (NFC tag, shortcut) or
 a badge reader through a **webhook**; the app shows worked time, the daily target, the running balance, an
@@ -78,13 +78,13 @@ wrangler.jsonc .dev.vars.example             Cloudflare deployment / local dev s
 | `npm run typecheck` | `tsc -b` (app, worker and node projects) |
 | `npm run build` | typecheck + Vite build for Workers (`dist/client` + worker) |
 | `npm run deploy` | build + `wrangler deploy` |
-| `npm run db:migrate:local` / `db:migrate:remote` | apply `migrations/` to the D1 database `opointeuse` |
+| `npm run db:migrate:local` / `db:migrate:remote` | apply `migrations/` to the D1 database `time-clock-pointeuse` |
 | `npm run build:node` | front (`vite build --mode node` → `dist/client`) + server bundle `dist/server/index.mjs` |
 | `npm start` | `node dist/server/index.mjs` (reads `.env`, migrates, serves on `PORT`) |
 | `npm run user -- <cmd>` | accounts CLI (dev, via tsx); built: `node dist/server/cli.mjs <cmd>` |
 
 CLI target, by priority: `--db <file>` | `--d1-local` | `--d1-remote` > `$DATABASE_PATH` (environment, or `./.env`,
-which the CLI loads; set in `.env.example` and in the Docker image) > `./data/opointeuse.db` if it exists > error.
+which the CLI loads; set in `.env.example` and in the Docker image) > `./data/time-clock-pointeuse.db` if it exists > error.
 SQLite targets are created and migrated; D1 needs `npm run db:migrate:local|remote` first. Commands: `add <name>
 [--owner|--admin] [--name "…"] [--locale] [--timezone] [--holidays] [--generate-password|--password-stdin]`, `list [--json]`,
 `passwd`, `token [--regenerate]`, `role <name> owner|admin|user`, `perm <name> [--edit-own|--view-presence|--view-team on|off]`,
@@ -144,18 +144,18 @@ Targeted checks while others work on the tree: `npx vitest run <dir>`, `npx tsc 
 ## Recipes
 
 ### Deploy (sequence per target; details in `docs/deploy-*.md`, guided flow in the setup skill)
-- **Cloudflare**: `npm ci` → `npx wrangler login` → `npx wrangler d1 create opointeuse` → paste the id into
+- **Cloudflare**: `npm ci` → `npx wrangler login` → `npx wrangler d1 create time-clock-pointeuse` → paste the id into
   `wrangler.jsonc` `database_id` → `npm run db:migrate:remote` → `npx wrangler secret put SESSION_SECRET`
   (≥ 32 chars, e.g. `openssl rand -hex 32`) → optional `vars` `DEFAULT_*` in `wrangler.jsonc` →
   `npm run deploy` → `npm run user -- add <name> --d1-remote --generate-password` (first account = superadmin).
 - **Node**: `npm ci` → `npm run build:node` → `cp .env.example .env`, set `SESSION_SECRET` (+ `DEFAULT_*`,
-  `PORT`; `DATABASE_PATH=./data/opointeuse.db` is already set) → `npm run user -- add <name>
+  `PORT`; `DATABASE_PATH=./data/time-clock-pointeuse.db` is already set) → `npm run user -- add <name>
   --generate-password` (reads `.env`, creates and migrates the DB) → `npm start`. Behind a TLS proxy, forward
   `X-Forwarded-Proto` so the session cookie gets `Secure`, and add HSTS there. One Node process per SQLite file.
 - **Docker**: create `.env` with `SESSION_SECRET` → set `DEFAULT_*` by uncommenting them under `environment:` in
   `docker-compose.yml` (values only in `.env` are not passed to the container) → `docker compose up -d --build` →
-  `docker compose exec opointeuse node dist/server/cli.mjs add <name> --generate-password` (DB at
-  `/data/opointeuse.db`, named volume `opointeuse-data`).
+  `docker compose exec time-clock-pointeuse node dist/server/cli.mjs add <name> --generate-password` (DB at
+  `/data/time-clock-pointeuse.db`, named volume `time-clock-pointeuse-data`).
 - Team: from the Team page (owner/admin) or one `add <name> --name "Full Name" --generate-password` per person (same
   prefix / target flag), credentials handed out privately; `role <name> admin` for managers, `perm <name> --view-presence
   on …` for extra rights; per-person rules without a CLI flag (workdays, other daily target) via the Settings page or

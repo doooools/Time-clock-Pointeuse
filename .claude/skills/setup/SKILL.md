@@ -1,9 +1,9 @@
 ---
 name: setup
-description: Guided installation of Opointeuse (self-hosted time clock). Use when the user wants to install, set up, deploy, self-host or configure Opointeuse, on Cloudflare Workers + D1, on a Node server or with Docker, for one person or a team — e.g. "deploy this on Cloudflare", "install it on my VPS with Docker", "set it up for my 10-person company in Belgium". Asks the needed questions, then runs the steps (database, secrets, defaults, migrations, first account (superadmin), deploy, checks, webhook URL).
+description: Guided installation of Time clock (self-hosted time tracker). Use when the user wants to install, set up, deploy, self-host or configure Time clock, on Cloudflare Workers + D1, on a Node server or with Docker, for one person or a team — e.g. "deploy this on Cloudflare", "install it on my VPS with Docker", "set it up for my 10-person company in Belgium". Asks the needed questions, then runs the steps (database, secrets, defaults, migrations, first account (superadmin), deploy, checks, webhook URL).
 ---
 
-# Set up Opointeuse
+# Set up Time clock
 
 Walk the user through a working instance, end to end. Read `CLAUDE.md` first if it is not already in context.
 Reference docs: `docs/deploy-cloudflare.md`, `docs/deploy-node.md`, `docs/deploy-docker.md`,
@@ -65,7 +65,7 @@ region code in upper case).
 ## 3a. Cloudflare Workers + D1
 
 1. `npx wrangler login` (opens a browser; the user completes it).
-2. **Confirm**, then `npx wrangler d1 create opointeuse` → copy the printed `database_id` into
+2. **Confirm**, then `npx wrangler d1 create time-clock-pointeuse` → copy the printed `database_id` into
    `wrangler.jsonc` (`d1_databases[0].database_id`, replacing the zero UUID).
 3. Defaults: add to `wrangler.jsonc` at top level
    ```jsonc
@@ -78,7 +78,7 @@ region code in upper case).
 7. First account (it becomes the **superadmin**, role `owner`, automatically):
    `npm run user -- add <username> --d1-remote --generate-password` (add
    `--name "Display Name"`, `--locale`, `--timezone`, `--holidays` if they differ from the defaults).
-8. Optional custom domain: Cloudflare dashboard → Workers & Pages → the `opointeuse` worker → Settings → Domains &
+8. Optional custom domain: Cloudflare dashboard → Workers & Pages → the `time-clock-pointeuse` worker → Settings → Domains &
    Routes. With a custom domain, suggest enabling HSTS (SSL/TLS → Edge Certificates) and a rate limiting rule on
    `/api/login` (Security → WAF), see `docs/deploy-cloudflare.md` ("Security").
 
@@ -90,7 +90,7 @@ Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`)
 
 1. `npm run build:node` (front in `dist/client`, server bundle `dist/server/index.mjs`, CLI `dist/server/cli.mjs`).
 2. `cp .env.example .env` and set `SESSION_SECRET=…`, the `DEFAULT_*` values, and if needed `PORT` (3000) and
-   `HOST` (0.0.0.0; `127.0.0.1` behind a local proxy). `DATABASE_PATH=./data/opointeuse.db` is already set; the
+   `HOST` (0.0.0.0; `127.0.0.1` behind a local proxy). `DATABASE_PATH=./data/time-clock-pointeuse.db` is already set; the
    server and the CLI both use it.
 3. First account, which becomes the **superadmin** (from the project folder, so `.env` is read; the database is created
    and migrated if needed): `npm run user -- add <username> --generate-password`
@@ -101,7 +101,7 @@ Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`)
    otherwise the session cookie is not marked `Secure`. If the instance is on the Internet, also set HSTS and a
    per-IP rate limit on `/api/login` at the proxy (examples in `docs/deploy-node.md`, "Security notes"). Run a
    single Node process per database file.
-6. Backups: copy the SQLite file safely (`sqlite3 data/opointeuse.db ".backup backup.db"`, or stop the service).
+6. Backups: copy the SQLite file safely (`sqlite3 data/time-clock-pointeuse.db ".backup backup.db"`, or stop the service).
 
 ## 3c. Docker (Compose)
 
@@ -110,9 +110,9 @@ Local development later: `cp .dev.vars.example .dev.vars` (set `SESSION_SECRET`)
 2. Defaults: in `docker-compose.yml`, uncomment the `DEFAULT_*` lines under `environment` and set the values.
    Change the published port in `ports` if 3000 is taken.
 3. **Confirm**, then `docker compose up -d --build`. Check `docker compose ps` (healthcheck on `/api/me`) and
-   `docker compose logs opointeuse`.
-4. First account (the **superadmin**): `docker compose exec opointeuse node dist/server/cli.mjs add <username> --generate-password`
-   (`DATABASE_PATH=/data/opointeuse.db` is preset; data lives in the named volume `opointeuse-data`).
+   `docker compose logs time-clock-pointeuse`.
+4. First account (the **superadmin**): `docker compose exec time-clock-pointeuse node dist/server/cli.mjs add <username> --generate-password`
+   (`DATABASE_PATH=/data/time-clock-pointeuse.db` is preset; data lives in the named volume `time-clock-pointeuse-data`).
 5. HTTPS: put a reverse proxy in front (see `docs/deploy-docker.md`), forwarding `X-Forwarded-Proto`, with HSTS
    and, on the Internet, a per-IP rate limit on `/api/login`.
 6. Updates: `git pull && docker compose up -d --build` (migrations run at startup). Back up the volume first.

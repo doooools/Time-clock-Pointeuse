@@ -1,5 +1,5 @@
 {
-  "name": "opointeuse",
+  "name": "time-clock-pointeuse",
   "private": true,
   "version": "0.1.0",
   "license": "Apache-2.0",
@@ -19,8 +19,8 @@
     "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "db:migrate:local": "wrangler d1 migrations apply opointeuse --local",
-    "db:migrate:remote": "wrangler d1 migrations apply opointeuse --remote",
+    "db:migrate:local": "wrangler d1 migrations apply time-clock-pointeuse --local",
+    "db:migrate:remote": "wrangler d1 migrations apply time-clock-pointeuse --remote",
     "user": "tsx scripts/user.ts",
     "cf-typegen": "wrangler types"
   },

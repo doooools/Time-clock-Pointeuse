@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { applyMigrations, type Migration } from "../migrate";
 import { createSqliteDb, type SqliteDb } from "../db/sqlite";
 
-export const DEFAULT_DATABASE_PATH = "./data/opointeuse.db";
+export const DEFAULT_DATABASE_PATH = "./data/time-clock-pointeuse.db";
 
 /** Loads `./.env` into `process.env` when it exists. Variables already set in the environment win. */
 export function loadDotEnv(path = ".env"): boolean {
@@ -16,7 +16,7 @@ export function loadDotEnv(path = ".env"): boolean {
   return true;
 }
 
-/** Absolute database path from `DATABASE_PATH` (default `./data/opointeuse.db`), or `":memory:"`. */
+/** Absolute database path from `DATABASE_PATH` (default `./data/time-clock-pointeuse.db`), or `":memory:"`. */
 export function databasePath(env: NodeJS.ProcessEnv = process.env): string {
   const raw = env.DATABASE_PATH?.trim() || DEFAULT_DATABASE_PATH;
   return raw === ":memory:" ? raw : resolve(raw);

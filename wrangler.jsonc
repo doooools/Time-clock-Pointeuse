@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "opointeuse",
+  "name": "time-clock-pointeuse",
   "main": "server/entry/cloudflare.ts",
   "compatibility_date": "2026-09-01",
   "assets": {
@@ -13,8 +13,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "opointeuse",
-      // Replace with the id printed by `npx wrangler d1 create opointeuse`.
+      "database_name": "time-clock-pointeuse",
+      // Replace with the id printed by `npx wrangler d1 create time-clock-pointeuse`.
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
