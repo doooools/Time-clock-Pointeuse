@@ -3,9 +3,10 @@
 export class UsageError extends Error {}
 
 /** Flags that take a value. */
-const VALUE_FLAGS = ["db", "name", "locale", "timezone", "holidays", "date-order", "d1-name", "months", "seed"] as const;
+const VALUE_FLAGS = ["db", "name", "locale", "timezone", "holidays", "date-order", "d1-name", "months", "seed", "edit-own", "view-presence", "view-team"] as const;
 /** Flags that do not take a value. */
 const BOOLEAN_FLAGS = [
+  "owner",
   "admin",
   "regenerate",
   "yes",

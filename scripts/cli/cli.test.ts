@@ -176,7 +176,7 @@ describe.each([
     const listed = await run(["list", "--json"]);
     const users = JSON.parse(listed.text) as Array<Record<string, unknown>>;
     expect(users.map((u) => u.username)).toEqual(["alice", "bob"]);
-    expect(users[0]).toMatchObject({ role: "admin", displayName: 'Alice\'s "desk"', settings: { locale: "fr", timezone: "Europe/Paris" } });
+    expect(users[0]).toMatchObject({ role: "owner", displayName: 'Alice\'s "desk"', settings: { locale: "fr", timezone: "Europe/Paris" } });
 
     expect((await run(["token", "alice"])).text).toContain(token);
     const regenerated = await run(["token", "alice", "--regenerate"]);
@@ -185,14 +185,14 @@ describe.each([
     expect((await run(["passwd", "bob", "--password-stdin"], "another-pass-1\n")).code).toBe(0);
     expect((await run(["passwd", "ghost", "--generate-password"])).code).toBe(1);
 
-    // Last active admin: cannot be demoted, disabled or removed.
-    expect((await run(["role", "alice", "user"])).err).toContain("last active admin");
-    expect((await run(["disable", "alice"])).err).toContain("last active admin");
-    expect((await run(["remove", "alice", "--yes"])).err).toContain("last active admin");
+    // Last active owner: cannot be demoted, disabled or removed.
+    expect((await run(["role", "alice", "user"])).err).toContain("last active owner");
+    expect((await run(["disable", "alice"])).err).toContain("last active owner");
+    expect((await run(["remove", "alice", "--yes"])).err).toContain("last active owner");
     expect((await run(["remove", "bob"])).err).toContain("--yes");
 
-    // With a second admin everything is allowed.
-    expect((await run(["role", "bob", "admin"])).code).toBe(0);
+    // With a second owner everything is allowed.
+    expect((await run(["role", "bob", "owner"])).code).toBe(0);
     expect((await run(["disable", "alice"])).code).toBe(0);
     expect(JSON.parse((await run(["list", "--json"])).text)[0].disabled).toBe(true);
     expect((await run(["enable", "alice"])).code).toBe(0);
@@ -204,7 +204,7 @@ describe.each([
   it("seeds demo data once, refuses accounts with punches unless --yes, and is deterministic", async () => {
     const target = makeTarget();
     const h = () => makeCtx(target);
-    await runCli(["add", "demo", "--admin", "--timezone", "Europe/Paris", "--holidays", "FR", "--generate-password"], h().ctx);
+    await runCli(["add", "demo", "--timezone", "Europe/Paris", "--holidays", "FR", "--generate-password"], h().ctx);
 
     const first = h();
     expect(await runCli(["seed-demo", "demo", "--months", "2"], first.ctx)).toBe(0);
@@ -262,7 +262,8 @@ describe.each([
     expect(await runCli(["import", "alice", file, "--date-order", "xyz"], h().ctx)).toBe(2);
 
     // Deleting the account removes its punches.
-    await runCli(["add", "boss", "--admin", "--generate-password"], h().ctx);
+    await runCli(["add", "boss", "--generate-password"], h().ctx);
+    await runCli(["role", "boss", "owner"], h().ctx);
     expect(await runCli(["remove", "alice", "--yes"], h().ctx)).toBe(0);
     expect((await target.db.prepare("SELECT COUNT(*) AS n FROM punches").first<{ n: number }>())!.n).toBe(0);
   });
@@ -272,11 +273,139 @@ describe("unlock", () => {
   it("resets the failed-login counter and the lockout", async () => {
     const target = sqliteTarget();
     const h = () => makeCtx(target);
-    await runCli(["add", "alice", "--admin", "--generate-password"], h().ctx);
+    await runCli(["add", "alice", "--generate-password"], h().ctx);
     await target.db.prepare("UPDATE users SET failed_logins = 10, locked_until = 99999999999999").run();
     expect(await runCli(["unlock", "alice"], h().ctx)).toBe(0);
     expect(await target.db.prepare("SELECT failed_logins AS f, locked_until AS l FROM users").first()).toEqual({ f: 0, l: null });
 
+  });
+});
+
+describe("roles, rights and journal", () => {
+  const entries = async (target: Target) =>
+    (
+      await target.db
+        .prepare("SELECT action, actor_id, subject_id, source, target, before, after FROM audit_log ORDER BY id")
+        .all<Record<string, unknown>>()
+    ).results;
+
+  it("makes the first account owner, refuses conflicting flags, and logs every mutation as a CLI change", async () => {
+    const target = sqliteTarget();
+    const run = async (argv: string[], stdin = "") => {
+      const h = makeCtx(target, stdin);
+      return { code: await runCli(argv, h.ctx), text: h.text(), err: h.errText() };
+    };
+    const first = await run(["add", "alice", "--admin", "--generate-password"]);
+    expect(first.text).toContain("(owner)");
+    expect(first.text).toContain("First account");
+    expect((await run(["add", "x", "--owner", "--admin", "--generate-password"])).code).toBe(2);
+    expect((await run(["add", "bob", "--generate-password"])).text).toContain("(user)");
+    expect((await run(["add", "cara", "--admin", "--generate-password"])).text).toContain("(admin)");
+
+    const listed = (await run(["list"])).text;
+    expect(listed).toMatch(/bob\s+user\s+edit-own/);
+    expect(listed).toMatch(/cara\s+admin\s+all/);
+
+    expect((await run(["perm", "bob"])).text).toContain("edit-own=on  presence=off  team=off");
+    const changed = await run(["perm", "bob", "--edit-own", "off", "--view-team", "on"]);
+    expect(changed.text).toContain("edit-own=off  presence=off  team=on");
+    expect((await run(["perm", "bob", "--view-team", "maybe"])).code).toBe(2);
+    await run(["perm", "bob", "--view-team", "on"]); // no change: not logged
+
+    await run(["role", "bob", "admin"]);
+    await run(["disable", "bob"]);
+    await run(["enable", "bob"]);
+    await run(["passwd", "bob", "--generate-password"]);
+    await run(["token", "bob", "--regenerate"]);
+    await run(["unlock", "bob"]);
+
+    const log = await entries(target);
+    expect(log.every((e) => e.actor_id === null && e.source === "cli")).toBe(true);
+    expect(log.map((e) => e.action)).toEqual([
+      "user.create",
+      "user.create",
+      "user.create",
+      "user.update", // perm
+      "user.update", // role
+      "user.update", // disable
+      "user.update", // enable
+      "user.update", // passwd
+      "user.token",
+      "user.unlock",
+    ]);
+    expect(JSON.parse(log[3].after as string)).toEqual({ permissions: { editOwn: false, viewTeam: true } });
+    expect(JSON.parse(log[4].before as string)).toEqual({ role: "user" });
+    expect(JSON.parse(log[7].after as string)).toEqual({ password: "reset" });
+    expect(JSON.stringify(log)).not.toMatch(/pbkdf2/);
+
+    await run(["remove", "bob", "--yes"]);
+    const deleted = (await entries(target)).at(-1)!;
+    expect(deleted).toMatchObject({ action: "user.delete", source: "cli" });
+    expect(JSON.parse(deleted.before as string)).toMatchObject({ username: "bob", role: "admin" });
+  });
+
+  it("logs imports and notifies the account owner", async () => {
+    const target = sqliteTarget();
+    const h = (stdin = "") => makeCtx(target, stdin);
+    await runCli(["add", "alice", "--timezone", "Europe/Paris", "--generate-password"], h().ctx);
+    await runCli(["import", "alice", "-"], h("25/09/2026 08:12\n25/09/2026 12:01\n").ctx);
+    const imp = (await entries(target)).find((e) => e.action === "punch.import")!;
+    expect(JSON.parse(imp.after as string)).toEqual({ inserted: 2, skipped: 0, from: "2026-09-25", to: "2026-09-25" });
+    expect((await target.db.prepare("SELECT COUNT(*) AS n FROM notifications").first<{ n: number }>())!.n).toBe(1);
+  });
+
+  it("creates the demo team, with an owner first, and refuses to run twice without --yes", async () => {
+    const target = sqliteTarget();
+    const h = () => makeCtx(target);
+    const first = h();
+    expect(await runCli(["demo-team", "--months", "1", "--timezone", "Europe/Paris"], first.ctx)).toBe(0);
+    expect(first.text()).toContain("alice: owner, password");
+    const users = (
+      await target.db
+        .prepare("SELECT username, role, perm_edit_own AS e, perm_view_presence AS p FROM users ORDER BY id")
+        .all<Record<string, unknown>>()
+    ).results;
+    expect(users).toEqual([
+      { username: "alice", role: "owner", e: 1, p: 0 },
+      { username: "bruno", role: "admin", e: 1, p: 0 },
+      { username: "chloe", role: "user", e: 1, p: 1 },
+      { username: "david", role: "user", e: 0, p: 0 },
+    ]);
+    const punches = async (name: string) =>
+      (await target.db
+        .prepare("SELECT COUNT(*) AS n FROM punches WHERE user_id = (SELECT id FROM users WHERE username = ?)")
+        .bind(name)
+        .first<{ n: number }>())!.n;
+    expect(await punches("alice")).toBeGreaterThan(20);
+    const stamps = async (name: string) =>
+      (
+        await target.db
+          .prepare("SELECT ts FROM punches WHERE user_id = (SELECT id FROM users WHERE username = ?) ORDER BY ts")
+          .bind(name)
+          .all<{ ts: number }>()
+      ).results.map((r) => r.ts);
+    expect(await stamps("alice")).not.toEqual(await stamps("david")); // different seeds
+    // chloe has a pending notification: the CLI correction of one of her punches.
+    const pending = await target.db
+      .prepare(
+        "SELECT a.action FROM notifications n JOIN audit_log a ON a.id = n.audit_id WHERE n.user_id = (SELECT id FROM users WHERE username = 'chloe') AND n.dismissed_at IS NULL",
+      )
+      .all<{ action: string }>();
+    expect(pending.results.map((r) => r.action)).toContain("punch.update");
+
+    const again = h();
+    expect(await runCli(["demo-team"], again.ctx)).toBe(1);
+    expect(again.errText()).toContain("--yes");
+    const forced = h();
+    expect(await runCli(["demo-team", "--months", "1", "--yes"], forced.ctx)).toBe(0);
+    expect(forced.text()).toContain("already exists");
+  });
+
+  it("makes alice an admin when an owner already exists", async () => {
+    const target = sqliteTarget();
+    await runCli(["add", "root", "--generate-password"], makeCtx(target).ctx);
+    expect(await runCli(["demo-team", "--months", "1"], makeCtx(target).ctx)).toBe(0);
+    expect(await target.db.prepare("SELECT role FROM users WHERE username = 'alice'").first()).toEqual({ role: "admin" });
   });
 });
 
