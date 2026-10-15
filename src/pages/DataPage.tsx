@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { parseRawTimestamps, type ParseResult } from "../../shared/parse";
 import { dayKey, formatClock, monthKey } from "../../shared/time";
 import { arrowOf, cx, Segmented } from "../components/Widgets";
-import { dayLabel, monthLabel } from "../lib/dates";
+import { dayLabel as dayLabelIn, monthYear } from "../components/charts/intl";
+import { useLocale, useT } from "../i18n";
 import { exportCsv, exportXlsx } from "../lib/export";
 import { dur, signed, signOf } from "../lib/fmt";
 import { useStore } from "../lib/store";
@@ -11,6 +12,8 @@ import { useToast } from "../lib/toast";
 const PREVIEW_DAYS = 30;
 
 function ExportSection() {
+  const t = useT();
+  const { locale } = useLocale();
   const { days } = useStore();
   const past = days.filter((d) => !d.isFuture);
   const months = [...new Set(past.map((d) => monthKey(d.date)))].reverse();
@@ -18,16 +21,16 @@ function ExportSection() {
   const [mode, setMode] = useState<"mois" | "annee" | "tout">("mois");
   const [pickedMonth, setMonth] = useState("");
   const [pickedYear, setYear] = useState("");
-  // Sans choix valide (aucune donnée au montage, ou import depuis), on retombe sur le plus récent.
+  // Without a valid pick (no data at mount, or data imported since), fall back to the most recent.
   const month = months.includes(pickedMonth) ? pickedMonth : (months[0] ?? "");
   const year = years.includes(pickedYear) ? pickedYear : (years[0] ?? "");
 
   const selection = useMemo(() => {
     if (!past.length) return { days: [], title: "", slug: "" };
-    if (mode === "mois") return { days: past.filter((d) => monthKey(d.date) === month), title: monthLabel(month), slug: month };
-    if (mode === "annee") return { days: past.filter((d) => d.date.startsWith(year)), title: `Année ${year}`, slug: year };
-    return { days: past, title: "Historique complet", slug: "complet" };
-  }, [mode, month, year, past]);
+    if (mode === "mois") return { days: past.filter((d) => monthKey(d.date) === month), title: monthYear(locale, month), slug: month };
+    if (mode === "annee") return { days: past.filter((d) => d.date.startsWith(year)), title: t("data.title_year", { year }), slug: year };
+    return { days: past, title: t("data.title_all"), slug: "all" };
+  }, [mode, month, year, past, locale, t]);
 
   const worked = selection.days.reduce((a, d) => a + d.workedMin, 0);
   const delta = selection.days.reduce((a, d) => a + d.deltaMin, 0);
@@ -36,33 +39,33 @@ function ExportSection() {
   return (
     <section className="flex flex-col gap-[18px]" aria-labelledby="export-titre">
       <h1 id="export-titre" className="-rotate-2 self-start bg-paper px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
-        EXPORT
+        {t("data.export_title")}
       </h1>
       {past.length === 0 ? (
-        <p className="text-paper-muted">Rien à exporter pour le moment.</p>
+        <p className="text-paper-muted">{t("data.nothing_to_export")}</p>
       ) : (
         <>
           <Segmented
             value={mode}
             onChange={setMode}
             options={[
-              { value: "mois", label: "un mois" },
-              { value: "annee", label: "une année" },
-              { value: "tout", label: "tout l'historique" },
+              { value: "mois", label: t("data.mode_month") },
+              { value: "annee", label: t("data.mode_year") },
+              { value: "tout", label: t("data.mode_all") },
             ]}
             className="mt-2 flex-wrap text-base"
           />
           {mode !== "tout" && (
             <div className="relative">
               <select
-                aria-label={mode === "mois" ? "Mois" : "Année"}
+                aria-label={mode === "mois" ? t("data.month_aria") : t("data.year_aria")}
                 className="field w-full cursor-pointer appearance-none py-2.5 pr-10 text-lg font-normal"
                 value={mode === "mois" ? month : year}
                 onChange={(e) => (mode === "mois" ? setMonth(e.target.value) : setYear(e.target.value))}
               >
                 {(mode === "mois" ? months : years).map((v) => (
                   <option key={v} value={v} className="bg-ink">
-                    {mode === "mois" ? monthLabel(v).toLowerCase() : v}
+                    {mode === "mois" ? monthYear(locale, v).toLowerCase() : v}
                   </option>
                 ))}
               </select>
@@ -72,12 +75,12 @@ function ExportSection() {
             </div>
           )}
           <div className="paper-card grid rotate-[.6deg] grid-cols-[1fr_auto] gap-y-2 px-5 py-[18px] text-[17px]">
-            <span className="col-span-2 font-label text-sm">APERÇU · {selection.title.toLowerCase()}</span>
-            <span>jours</span>
+            <span className="col-span-2 font-label text-sm">{t("data.preview", { title: selection.title.toLowerCase() })}</span>
+            <span>{t("data.stat_days")}</span>
             <b>{daysWorked}</b>
-            <span>heures travaillées</span>
+            <span>{t("data.stat_hours")}</span>
             <b>{dur(worked)}</b>
-            <span>écart</span>
+            <span>{t("data.stat_gap")}</span>
             <b className={cx(signOf(delta) < 0 ? "bg-red px-1.5 text-white" : signOf(delta) > 0 && "bg-yellow px-1.5")}>
               {signed(delta)} {arrowOf(delta)}
             </b>
@@ -86,16 +89,16 @@ function ExportSection() {
             <button
               className="btn-primary flex-1 p-3 text-[17px]"
               disabled={!selection.days.length}
-              onClick={() => exportXlsx(selection.days, `Pointeuse — ${selection.title}`, `pointeuse-${selection.slug}.xlsx`)}
+              onClick={() => exportXlsx(selection.days, t("data.workbook_title", { title: selection.title }), `opointeuse-${selection.slug}.xlsx`, locale)}
             >
-              ↓ Excel (.xlsx)
+              {t("data.download_xlsx")}
             </button>
             <button
               className="btn-secondary flex-1 p-2.5 text-[17px]"
               disabled={!selection.days.length}
-              onClick={() => exportCsv(selection.days, `pointeuse-${selection.slug}.csv`)}
+              onClick={() => exportCsv(selection.days, `opointeuse-${selection.slug}.csv`, locale)}
             >
-              ↓ CSV
+              {t("data.download_csv")}
             </button>
           </div>
         </>
@@ -114,6 +117,8 @@ async function readFile(file: File): Promise<string> {
 }
 
 function ImportSection() {
+  const t = useT();
+  const { locale } = useLocale();
   const { punches, bulkImport } = useStore();
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -122,7 +127,7 @@ function ImportSection() {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  // Chaque horodatage reconnu, marqué doublon s'il est à < 60 s d'un existant ou d'un précédent.
+  // Every recognised timestamp, flagged as a duplicate when within 60 s of an existing or earlier one.
   const preview = useMemo(() => {
     if (!result) return null;
     const existing = punches.map((p) => p.ts);
@@ -146,7 +151,7 @@ function ImportSection() {
       setText(await readFile(file));
       setResult(null);
     } catch {
-      toast("Fichier illisible", { tone: "error" });
+      toast(t("data.file_unreadable"), { tone: "error" });
     }
   }
 
@@ -155,7 +160,7 @@ function ImportSection() {
     setBusy(true);
     try {
       const r = await bulkImport(preview.kept);
-      toast(`${r.inserted} pointage(s) importé(s)${r.skipped ? `, ${r.skipped} ignoré(s)` : ""}`);
+      toast(t("data.imported", { count: r.inserted }) + (r.skipped ? t("data.skipped", { count: r.skipped }) : ""));
       setText("");
       setResult(null);
     } finally {
@@ -166,11 +171,11 @@ function ImportSection() {
   return (
     <section className="flex min-w-0 flex-col gap-[18px]" aria-labelledby="import-titre">
       <h2 id="import-titre" className="rotate-[1.5deg] self-start bg-yellow px-[18px] py-1.5 font-display text-4xl leading-none text-onpaper lg:text-[56px]">
-        IMPORT D'HISTORIQUE
+        {t("data.import_title")}
       </h2>
       <div className="mt-2 grid gap-4 lg:grid-cols-[1fr_220px]">
         <textarea
-          aria-label="Horodatages à importer"
+          aria-label={t("data.textarea_aria")}
           className="min-h-[150px] resize-y bg-paper px-4 py-3.5 font-mono text-[15px] leading-[1.6] whitespace-pre text-onpaper outline-none placeholder:text-onpaper/45 focus:shadow-[0_0_0_3px_oklch(0.88_0.17_100/.5)]"
           placeholder={"25/09/2025 08:12:33\n2025-09-25 12:04\n26/09/2025;08:00;12:00;13:00;16:18"}
           value={text}
@@ -199,7 +204,7 @@ function ImportSection() {
               dragging ? "border-yellow bg-coal text-yellow" : "border-paper hover:bg-coal",
             )}
           >
-            déposer un fichier
+            {t("data.drop_file")}
             <br />
             .csv .txt .xlsx
           </button>
@@ -215,13 +220,12 @@ function ImportSection() {
             disabled={!text.trim()}
             onClick={() => setResult(parseRawTimestamps(text))}
           >
-            analyser
+            {t("data.analyze")}
           </button>
         </div>
       </div>
       <p className="text-sm leading-relaxed text-paper-muted">
-        Un horodatage par ligne, ou une date suivie de plusieurs heures. Séparateurs <code>;</code> <code>,</code> ou tabulation ; lignes
-        d'en-tête ignorées. Tout est lu en heure de Paris.
+        {t("data.help_before")} <code>;</code> <code>,</code> {t("data.help_after")}
       </p>
 
       {result && preview && (
@@ -229,29 +233,29 @@ function ImportSection() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <div className="bg-yellow px-3.5 py-3 text-onpaper">
               <div className="text-[30px] font-bold">{preview.kept.length}</div>
-              <div className="font-label text-[13px]">pointages reconnus · {preview.days.length} jours</div>
+              <div className="font-label text-[13px]">{t("data.recognized", { days: t("data.n_days", { count: preview.days.length }) })}</div>
             </div>
             <div className="border-2 border-paper px-3.5 py-2.5">
               <div className="text-[30px] font-bold">{preview.dups}</div>
-              <div className="font-label text-[13px] text-paper-muted">doublons ignorés</div>
+              <div className="font-label text-[13px] text-paper-muted">{t("data.duplicates")}</div>
             </div>
             <div className={cx("px-3.5 py-3", result.issues.length ? "bg-red text-white" : "border-2 border-paper")}>
               <div className="text-[30px] font-bold">{result.issues.length}</div>
-              <div className="font-label text-[13px]">lignes en erreur</div>
+              <div className="font-label text-[13px]">{t("data.error_lines")}</div>
             </div>
             <div className="border-2 border-dashed border-paper-dim px-3.5 py-2.5">
               <div className="text-[30px] font-bold">{result.ignored}</div>
-              <div className="font-label text-[13px] text-paper-muted">lignes ignorées (vides, en-têtes)</div>
+              <div className="font-label text-[13px] text-paper-muted">{t("data.ignored_lines")}</div>
             </div>
           </div>
 
           {result.issues.length > 0 && (
             <div className="flex flex-col gap-1.5 text-[15px]">
-              <div className="font-label text-sm text-paper-muted">ERREURS</div>
+              <div className="font-label text-sm text-paper-muted">{t("data.errors_title")}</div>
               <div className="max-h-56 overflow-y-auto">
                 {result.issues.map((i) => (
                   <div key={i.line} className="grid grid-cols-[80px_minmax(0,1fr)] gap-x-2.5 border-b border-dotted border-[oklch(0.35_0_0)] py-1.5 lg:grid-cols-[80px_260px_1fr]">
-                    <span className="text-red-text">ligne {i.line}</span>
+                    <span className="text-red-text">{t("data.line_n", { line: i.line })}</span>
                     <span className="truncate">{i.raw}</span>
                     <span className="col-start-2 text-paper-muted lg:col-start-auto lg:text-paper">{i.reason}</span>
                   </div>
@@ -262,28 +266,28 @@ function ImportSection() {
 
           {preview.days.length > 0 && (
             <div className="flex flex-col gap-1.5 text-[15px]">
-              <div className="font-label text-sm text-paper-muted">APERÇU JOUR PAR JOUR · heures ajoutées</div>
+              <div className="font-label text-sm text-paper-muted">{t("data.day_preview_title")}</div>
               {preview.days.slice(0, PREVIEW_DAYS).map(([date, stamps]) => (
                 <div key={date} className="grid grid-cols-[140px_1fr_50px] gap-2.5 border-b border-dotted border-[oklch(0.35_0_0)] py-1.5">
                   <span>
-                    {dayLabel(date)}/{date.slice(0, 4)}
+                    {dayLabelIn(locale, date)}/{date.slice(0, 4)}
                   </span>
                   <span>{stamps.map((ts) => formatClock(ts)).join(" · ")}</span>
                   <span className="text-right">+ {stamps.length}</span>
                 </div>
               ))}
               {preview.days.length > PREVIEW_DAYS && (
-                <div className="pt-1 font-label text-sm text-paper-dim">… et {preview.days.length - PREVIEW_DAYS} autres jours</div>
+                <div className="pt-1 font-label text-sm text-paper-dim">{t("data.more_days", { count: preview.days.length - PREVIEW_DAYS })}</div>
               )}
             </div>
           )}
 
           <div className="flex flex-wrap justify-end gap-3">
             <button className="btn-secondary" onClick={() => setResult(null)}>
-              annuler
+              {t("data.cancel")}
             </button>
             <button className="btn-primary -rotate-1 px-5 py-3 text-[17px]" disabled={busy || !preview.kept.length} onClick={doImport}>
-              {busy ? "import en cours…" : `confirmer l'import de ${preview.kept.length} pointage${preview.kept.length > 1 ? "s" : ""}`}
+              {busy ? t("data.importing") : t("data.confirm_import", { count: preview.kept.length })}
             </button>
           </div>
         </>

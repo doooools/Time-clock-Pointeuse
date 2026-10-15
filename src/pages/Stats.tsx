@@ -3,22 +3,20 @@ import { Link } from "react-router-dom";
 import { coversMidday, lunchBreak, monthlySummaries, weeklySummaries, type DayResult, type LunchBreak } from "../../shared/compute";
 import { addDays, dayKey, isoWeek, minutesOfDay, parseDayKey, weekStart } from "../../shared/time";
 import { Chart, PK, type ChartOption } from "../components/charts/Chart";
+import { dayLabel as dayLabelIn, fullDate, monthShort, monthYear, shortDate, weekdayShort } from "../components/charts/intl";
+import { useLocale, useT } from "../i18n";
 import { arrowOf, cx, dayTypeText, Kpi, Segmented, toneOf } from "../components/Widgets";
-import { dayLabel, frDate, monthLabel, shortDate } from "../lib/dates";
 import { dur, hmOfMinutes, signed } from "../lib/fmt";
 import { useIsDesktop } from "../lib/media";
 import { useStore } from "../lib/store";
 import { useOpenDay } from "../lib/viewDay";
 
-const MONTHS_SHORT = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
-const WD = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
-
 const PERIODS = [
-  { value: "1m", label: "1 mois", short: "1m", days: 31 },
-  { value: "3m", label: "3 mois", short: "3m", days: 92 },
-  { value: "6m", label: "6 mois", short: "6m", days: 183 },
-  { value: "1a", label: "1 an", short: "1 an", days: 366 },
-  { value: "all", label: "tout", short: "tout", days: Infinity },
+  { value: "1m", label: "stats.period_1m", short: "stats.period_1m_short", days: 31 },
+  { value: "3m", label: "stats.period_3m", short: "stats.period_3m_short", days: 92 },
+  { value: "6m", label: "stats.period_6m", short: "stats.period_6m_short", days: 183 },
+  { value: "1a", label: "stats.period_1y", short: "stats.period_1y_short", days: 366 },
+  { value: "all", label: "stats.period_all", short: "stats.period_all_short", days: Infinity },
 ] as const;
 type Period = (typeof PERIODS)[number]["value"];
 
@@ -26,7 +24,7 @@ const hours = (min: number) => Math.round((min / 60) * 100) / 100;
 const grid = { left: 56, right: 16, top: 16, bottom: 28 };
 const signedAxis = (v: number) => (v === 0 ? "0" : signed(v * 60));
 
-/** Dégradé net : jaune au-dessus de 0, rouge en dessous (relatif à la boîte de la série). */
+/** Hard-edged gradient: yellow above 0, red below (relative to the series box). */
 function splitGradient(values: number[]) {
   const max = Math.max(0, ...values);
   const min = Math.min(0, ...values);
@@ -39,8 +37,8 @@ function splitGradient(values: number[]) {
     ],
   };
 }
-/** Pied d'infobulle des graphiques cliquables. */
-const PICK_HINT = `<br/><span style="opacity:.55;font-size:12px">clic → ouvrir le jour</span>`;
+/** Tooltip footer of the clickable charts. */
+const pickHint = (hint: string) => `<br/><span style="opacity:.55;font-size:12px">${hint}</span>`;
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 function median(xs: number[]) {
   if (!xs.length) return 0;
@@ -61,13 +59,15 @@ function Block({ title, aside, children, className }: { title: ReactNode; aside?
   );
 }
 
-/** Calendrier annuel 53 × 7 en HTML (jaune sombre → jaune vif selon le travaillé). */
+/** 53 × 7 yearly calendar in HTML (dark yellow → bright yellow by time worked). */
 function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; today: string; onPick: (date: string) => void }) {
+  const t = useT();
+  const { locale } = useLocale();
   const first = addDays(weekStart(today), -52 * 7);
   const cells = Array.from({ length: 53 * 7 }, (_, i) => addDays(first, i));
   const last = cells[cells.length - 1];
   const scroller = useRef<HTMLDivElement>(null);
-  // Sur petit écran, on ouvre sur les semaines les plus récentes.
+  // On small screens, open on the most recent weeks.
   useEffect(() => {
     if (scroller.current) scroller.current.scrollLeft = scroller.current.scrollWidth;
   }, []);
@@ -77,14 +77,14 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
 
   return (
     <Block
-      title={`CALENDRIER · ${frDate(first)} → ${frDate(last)}`}
+      title={t("stats.heatmap_title", { from: fullDate(locale, first), to: fullDate(locale, last) })}
       aside={
         <span className="flex items-center gap-3.5">
-          moins
+          {t("stats.heatmap_less")}
           <span className="block h-3.5 w-3.5 bg-[oklch(0.4_0.06_100)]" />
           <span className="block h-3.5 w-3.5 bg-[oklch(0.64_0.115_100)]" />
-          <span className="block h-3.5 w-3.5 bg-yellow" /> plus ·
-          <span className="block h-3.5 w-3.5 bg-blue-heat" /> absence / férié
+          <span className="block h-3.5 w-3.5 bg-yellow" /> {t("stats.heatmap_more")} ·
+          <span className="block h-3.5 w-3.5 bg-blue-heat" /> {t("stats.heatmap_absence")}
         </span>
       }
     >
@@ -92,9 +92,9 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
         <div className="min-w-[640px]">
           <div className="grid grid-cols-[34px_1fr] gap-2">
             <div className="grid grid-rows-7 gap-[3px] text-[11px] text-paper-dim">
-              {["lun", "", "mer", "", "ven", "", "dim"].map((l, i) => (
+              {[1, 0, 3, 0, 5, 0, 7].map((wd, i) => (
                 <span key={i} className="leading-[18px]">
-                  {l}
+                  {wd ? weekdayShort(locale, wd).replace(/\.$/, "").toLowerCase() : ""}
                 </span>
               ))}
             </div>
@@ -110,7 +110,7 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
                   const t = Math.max(0, Math.min(1, (d.workedMin - 360) / 180));
                   bg = `oklch(${(0.4 + 0.48 * t).toFixed(2)} ${(0.06 + 0.11 * t).toFixed(3)} 100)`;
                 }
-                const label = `${dayLabel(date)}/${date.slice(0, 4)} · ${
+                const label = `${dayLabelIn(locale, date)}/${date.slice(0, 4)} · ${
                   d ? (d.workedMin > 0 ? dur(d.workedMin) : (dayTypeText(d) ?? "—")) : "—"
                 }`;
                 const cls = cx("box-border", future && "border border-dashed border-[oklch(0.3_0_0)]", date === today && "outline-2 outline-pink");
@@ -133,7 +133,7 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
           <div className="relative ml-[42px] h-4 text-xs text-paper-muted">
             {ticks.map(({ w, d }) => (
               <span key={w} className="absolute" style={{ left: `${(w / 53) * 100}%` }}>
-                {MONTHS_SHORT[d.m - 1]}
+                {monthShort(locale, d.m)}
               </span>
             ))}
           </div>
@@ -144,6 +144,10 @@ function Heatmap({ byDate, today, onPick }: { byDate: Map<string, DayResult>; to
 }
 
 export default function Stats() {
+  const t = useT();
+  const { locale } = useLocale();
+  const dayLabel = (date: string) => dayLabelIn(locale, date);
+  const hint = pickHint(t("stats.pick_hint"));
   const { days: allDays, settings } = useStore();
   const desktop = useIsDesktop();
   const [period, setPeriod] = useState<Period>("1a");
@@ -188,7 +192,7 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const d = days[ps[0].dataIndex];
-          return `${dayLabel(d.date)}<br/>solde <b>${signed(d.balanceMin)}</b><br/>jour ${signed(d.deltaMin)}${PICK_HINT}`;
+          return `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_balance")} <b>${signed(d.balanceMin)}</b><br/>${t("stats.tip_day")} ${signed(d.deltaMin)}${hint}`;
         },
       },
       xAxis: { type: "category", boundaryGap: false, data: days.map((d) => shortDate(d.date)) },
@@ -204,7 +208,7 @@ export default function Stats() {
         },
       ],
     }),
-    [days, desktop],
+    [days, desktop, locale, t, hint],
   );
 
   const dailyDays = days.filter((d) => d.targetMin > 0 || d.workedMin > 0);
@@ -216,7 +220,7 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const d = dailyDays[ps[0].dataIndex];
-          return `${dayLabel(d.date)}<br/>travaillé <b>${dur(d.workedMin)}</b><br/>écart ${signed(d.deltaMin)}${PICK_HINT}`;
+          return `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_worked")} <b>${dur(d.workedMin)}</b><br/>${t("stats.tip_gap")} ${signed(d.deltaMin)}${hint}`;
         },
       },
       xAxis: { type: "category", data: dailyDays.map((d) => shortDate(d.date)) },
@@ -240,7 +244,7 @@ export default function Stats() {
       ],
       dataZoom: dailyDays.length > 120 ? [{ type: "inside", startValue: dailyDays.length - 120 }] : [],
     }),
-    [dailyDays, target, today],
+    [dailyDays, target, today, locale, t, hint],
   );
 
   const weeks = weeklySummaries(days);
@@ -253,10 +257,10 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const w = weeks[ps[0].dataIndex];
-          return `semaine ${isoWeek(w.key).week} (${shortDate(w.from)} → ${shortDate(w.to)})<br/>travaillé <b>${dur(w.workedMin)}</b> / ${dur(w.targetMin)}<br/>écart ${signed(w.deltaMin)}`;
+          return `${t("stats.tip_week", { week: isoWeek(w.key).week, from: shortDate(w.from), to: shortDate(w.to) })}<br/>${t("stats.tip_worked")} <b>${dur(w.workedMin)}</b> / ${dur(w.targetMin)}<br/>${t("stats.tip_gap")} ${signed(w.deltaMin)}`;
         },
       },
-      xAxis: { type: "category", data: weeks.map((w) => `S${isoWeek(w.key).week}`), axisLine: { show: false } },
+      xAxis: { type: "category", data: weeks.map((w) => t("stats.week_short", { week: isoWeek(w.key).week })), axisLine: { show: false } },
       yAxis: { type: "value", axisLabel: { formatter: signedAxis } },
       series: [
         {
@@ -268,7 +272,7 @@ export default function Stats() {
         },
       ],
     }),
-    [weeks, desktop],
+    [weeks, desktop, t],
   );
 
   const months = monthlySummaries(days);
@@ -280,15 +284,15 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const m = months[ps[0].dataIndex];
-          return `${monthLabel(m.key)}<br/>travaillé <b>${dur(m.workedMin)}</b><br/>objectif ${dur(m.targetMin)}<br/>écart ${signed(m.deltaMin)}`;
+          return `${monthYear(locale, m.key)}<br/>${t("stats.tip_worked")} <b>${dur(m.workedMin)}</b><br/>${t("stats.tip_target")} ${dur(m.targetMin)}<br/>${t("stats.tip_gap")} ${signed(m.deltaMin)}`;
         },
       },
-      xAxis: { type: "category", data: months.map((m) => MONTHS_SHORT[Number(m.key.slice(5)) - 1]) },
+      xAxis: { type: "category", data: months.map((m) => monthShort(locale, Number(m.key.slice(5)))) },
       yAxis: { type: "value", axisLabel: { formatter: (v: number) => dur(v * 60) } },
       series: [
-        { name: "travaillé", type: "bar", barGap: "8%", barMaxWidth: 48, itemStyle: { color: PK.yellow }, data: months.map((m) => hours(m.workedMin)) },
+        { name: t("stats.series_worked"), type: "bar", barGap: "8%", barMaxWidth: 48, itemStyle: { color: PK.yellow }, data: months.map((m) => hours(m.workedMin)) },
         {
-          name: "objectif",
+          name: t("stats.series_target"),
           type: "bar",
           barMaxWidth: 48,
           itemStyle: { color: "transparent", borderColor: PK.paper, borderWidth: 2 },
@@ -296,13 +300,14 @@ export default function Stats() {
         },
       ],
     }),
-    [months],
+    [months, locale, t],
   );
 
   const arrivalOpt: ChartOption = useMemo(() => {
     const arr = complete.map((d) => Math.round(minutesOfDay(d.intervals[0].start)));
     const dep = complete.map((d) => Math.round(minutesOfDay(d.intervals[d.intervals.length - 1].end)));
     const lun = complete.map((d) => lunchBreak(d.intervals, shortPair));
+    const lunchName = t("stats.series_lunch");
     const lo = Math.min(420, ...arr.map((m) => Math.floor(m / 60) * 60));
     const hi = Math.max(1140, ...dep.map((m) => Math.ceil(m / 60) * 60));
     return {
@@ -311,20 +316,20 @@ export default function Stats() {
         trigger: "item",
         confine: true,
         formatter: (p: { seriesName: string; dataIndex: number; value: [number, number] }) => {
-          const day = dayLabel(complete[p.dataIndex].date);
+          const day = dayLabelIn(locale, complete[p.dataIndex].date);
           const l = lun[p.dataIndex];
-          if (p.seriesName === "pause midi" && l) {
-            return `${day} · pause midi ${hmOfMinutes(minutesOfDay(l.start))} → ${hmOfMinutes(minutesOfDay(l.end))} (${dur(l.minutes)})${PICK_HINT}`;
+          if (p.seriesName === lunchName && l) {
+            return `${day} · ${lunchName} ${hmOfMinutes(minutesOfDay(l.start))} → ${hmOfMinutes(minutesOfDay(l.end))} (${dur(l.minutes)})${hint}`;
           }
-          return `${day} · ${p.seriesName} ${hmOfMinutes(p.value[1])}${PICK_HINT}`;
+          return `${day} · ${p.seriesName} ${hmOfMinutes(p.value[1])}${hint}`;
         },
       },
       xAxis: { type: "category", data: complete.map((d) => shortDate(d.date)) },
       yAxis: { type: "value", inverse: true, min: lo, max: hi, interval: 180, axisLabel: { formatter: (v: number) => hmOfMinutes(v) } },
       series: [
-        { name: "arrivée", type: "scatter", symbol: "rect", symbolSize: 5, itemStyle: { color: PK.yellow }, data: arr.map((v, i) => [i, v]) },
-        { name: "départ", type: "scatter", symbol: "rect", symbolSize: 5, itemStyle: { color: PK.paper }, data: dep.map((v, i) => [i, v]) },
-        // Pause du midi : barre empilée (base transparente jusqu'à la sortie, puis la durée en rose).
+        { name: t("stats.series_arrival"), type: "scatter", symbol: "rect", symbolSize: 5, itemStyle: { color: PK.yellow }, data: arr.map((v, i) => [i, v]) },
+        { name: t("stats.series_departure"), type: "scatter", symbol: "rect", symbolSize: 5, itemStyle: { color: PK.paper }, data: dep.map((v, i) => [i, v]) },
+        // Lunch break: stacked bar (transparent base up to the exit, then the duration in pink).
         {
           name: "midi-base",
           type: "bar",
@@ -336,7 +341,7 @@ export default function Stats() {
           data: lun.map((l) => (l ? Math.round(minutesOfDay(l.start)) : "-")),
         },
         {
-          name: "pause midi",
+          name: lunchName,
           type: "bar",
           stack: "midi",
           barWidth: 4,
@@ -345,9 +350,9 @@ export default function Stats() {
         },
       ],
     };
-  }, [complete, shortPair]);
+  }, [complete, shortPair, locale, t, hint]);
 
-  // Pause du midi : jours qui couvrent le midi (ou ont une pause), avec la pause détectée ou null.
+  // Lunch break: days that cover midday (or have a break), with the detected break or null.
   const lunch = useMemo(() => {
     const rows = worked
       .map((d) => ({ d, l: lunchBreak(d.intervals, shortPair) }))
@@ -376,15 +381,15 @@ export default function Stats() {
         formatter: (ps: { dataIndex: number }[]) => {
           const { d, l } = rows[ps[0].dataIndex];
           return l
-            ? `${dayLabel(d.date)}<br/>pause <b>${dur(l.minutes)}</b><br/>${hmOfMinutes(minutesOfDay(l.start))} → ${hmOfMinutes(minutesOfDay(l.end))}${PICK_HINT}`
-            : `${dayLabel(d.date)}<br/><b>pas de pause</b>${PICK_HINT}`;
+            ? `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_break")} <b>${dur(l.minutes)}</b><br/>${hmOfMinutes(minutesOfDay(l.start))} → ${hmOfMinutes(minutesOfDay(l.end))}${hint}`
+            : `${dayLabelIn(locale, d.date)}<br/><b>${t("stats.tip_no_break")}</b>${hint}`;
         },
       },
       xAxis: { type: "category", data: rows.map((r) => shortDate(r.d.date)) },
       yAxis: { type: "value", axisLabel: { formatter: (v: number) => dur(v) } },
       series: [
         {
-          name: "pause",
+          name: t("stats.series_break"),
           type: "bar",
           barCategoryGap: "8%",
           itemStyle: { color: PK.pink },
@@ -398,7 +403,7 @@ export default function Stats() {
           },
         },
         {
-          name: "sans pause",
+          name: t("stats.series_no_break"),
           type: "scatter",
           symbol: "rect",
           symbolSize: 7,
@@ -408,9 +413,9 @@ export default function Stats() {
       ],
       dataZoom: rows.length > 120 ? [{ type: "inside", startValue: rows.length - 120 }] : [],
     };
-  }, [lunch]);
+  }, [lunch, locale, t, hint]);
 
-  // Répartition des heures de sortie par quart d'heure.
+  // Exit times split into quarter hours.
   const lunchStarts = useMemo(() => {
     const starts = lunch.taken.map((r) => minutesOfDay(r.l.start));
     const lo = Math.min(11 * 60, ...starts.map((m) => Math.floor(m / 15) * 15));
@@ -428,7 +433,7 @@ export default function Stats() {
         confine: true,
         formatter: (ps: { dataIndex: number }[]) => {
           const b = lunchStarts[ps[0].dataIndex];
-          return `sortie ${hmOfMinutes(b.from)} → ${hmOfMinutes(b.from + 15)}<br/><b>${b.n}</b> jour${b.n > 1 ? "s" : ""}`;
+          return `${t("stats.tip_exit")} ${hmOfMinutes(b.from)} → ${hmOfMinutes(b.from + 15)}<br/>${t("stats.tip_days", { count: b.n })}`;
         },
       },
       xAxis: { type: "category", data: lunchStarts.map((b) => hmOfMinutes(b.from)) },
@@ -441,7 +446,7 @@ export default function Stats() {
         },
       ],
     };
-  }, [lunchStarts]);
+  }, [lunchStarts, t]);
 
   const weekdays = useMemo(() => {
     const rows = [1, 2, 3, 4, 5, 6, 7].map((wd) => {
@@ -457,24 +462,24 @@ export default function Stats() {
   return (
     <div className="flex flex-col">
       <div className="flex flex-col gap-4 pt-5 lg:flex-row lg:items-center lg:justify-between lg:pt-9">
-        <h1 className="page-title self-start">les chiffres</h1>
+        <h1 className="page-title self-start">{t("stats.title")}</h1>
         <Segmented
           value={period}
           onChange={setPeriod}
-          options={PERIODS.map((p) => ({ value: p.value, label: desktop ? p.label : p.short }))}
+          options={PERIODS.map((p) => ({ value: p.value, label: t(desktop ? p.label : p.short) }))}
           className="text-sm lg:text-[17px]"
           itemClassName="flex-1 lg:flex-none"
         />
       </div>
 
       <div className="grid grid-cols-2 gap-2 pt-4 lg:grid-cols-6 lg:gap-4 lg:pt-8">
-        <Kpi label="écart sur la période" value={`${arrowOf(kpis.delta)} ${signed(kpis.delta)}`} tone={toneOf(kpis.delta)} rotate={-1} />
-        <Kpi label={desktop ? "moyenne / jour travaillé" : "moy. / jour"} value={worked.length ? dur(kpis.avgDay) : "—"} />
-        <Kpi label={desktop ? "arrivée moyenne" : "arrivée moy."} value={complete.length ? hmOfMinutes(kpis.arrival) : "—"} />
-        <Kpi label={desktop ? "départ moyen" : "départ moy."} value={complete.length ? hmOfMinutes(kpis.departure) : "—"} />
-        <Kpi label={desktop ? "pause moyenne" : "pause moy."} value={kpis.pause ? dur(kpis.pause) : "—"} />
+        <Kpi label={t("stats.kpi_gap_period")} value={`${arrowOf(kpis.delta)} ${signed(kpis.delta)}`} tone={toneOf(kpis.delta)} rotate={-1} />
+        <Kpi label={t(desktop ? "stats.kpi_avg_day" : "stats.kpi_avg_day_short")} value={worked.length ? dur(kpis.avgDay) : "—"} />
+        <Kpi label={t(desktop ? "stats.kpi_arrival" : "stats.kpi_arrival_short")} value={complete.length ? hmOfMinutes(kpis.arrival) : "—"} />
+        <Kpi label={t(desktop ? "stats.kpi_departure" : "stats.kpi_departure_short")} value={complete.length ? hmOfMinutes(kpis.departure) : "—"} />
+        <Kpi label={t(desktop ? "stats.kpi_pause" : "stats.kpi_pause_short")} value={kpis.pause ? dur(kpis.pause) : "—"} />
         <Kpi
-          label={`record${kpis.best ? ` · ${dayLabel(kpis.best.date)}` : ""}`}
+          label={`${t("stats.kpi_record")}${kpis.best ? ` · ${dayLabel(kpis.best.date)}` : ""}`}
           value={kpis.best ? dur(kpis.best.workedMin) : "—"}
           tone="pink"
           rotate={1}
@@ -486,13 +491,13 @@ export default function Stats() {
         <div className="flex flex-col gap-4 pt-10">
           <div className="flex h-[120px] items-center justify-center border-b-2 border-l-2 border-[oklch(0.5_0_0)]">
             <span className="-rotate-2 border-2 border-dashed border-[oklch(0.5_0_0)] px-3.5 py-2 font-label text-lg text-paper-muted">
-              {worked.length} jour{worked.length > 1 ? "s" : ""} pointé{worked.length > 1 ? "s" : ""} : il en faut 5 pour tracer
+              {t("stats.empty_days", { count: worked.length })}
             </span>
           </div>
           <div className="flex flex-wrap gap-3 text-[15px] text-[oklch(0.82_0.01_90)]">
-            Choisissez une période plus longue ou
+            {t("stats.empty_hint")}
             <Link to="/donnees" className="font-label text-yellow hover:text-pink">
-              importez un historique →
+              {t("stats.empty_import")}
             </Link>
           </div>
         </div>
@@ -500,38 +505,42 @@ export default function Stats() {
         <>
           <Block
             className="pt-5 lg:pt-10"
-            title={<>SOLDE CUMULÉ · jaune = en avance, rouge = en retard</>}
-            aside={`max ${signed(Math.max(0, ...days.map((d) => d.balanceMin)))} · min ${signed(Math.min(0, ...days.map((d) => d.balanceMin)))} · aujourd'hui ${signed(days[days.length - 1]?.balanceMin ?? 0)}`}
+            title={t("stats.balance_title")}
+            aside={t("stats.balance_aside", {
+              max: signed(Math.max(0, ...days.map((d) => d.balanceMin))),
+              min: signed(Math.min(0, ...days.map((d) => d.balanceMin))),
+              today: signed(days[days.length - 1]?.balanceMin ?? 0),
+            })}
           >
             <Chart option={balanceOpt} height={desktop ? 240 : 150} onPick={(i) => days[i] && openDay(days[i].date)} />
           </Block>
 
           <Block
             className="pt-5 lg:pt-9"
-            title={`HEURES TRAVAILLÉES PAR JOUR · ligne = objectif ${dur(target)}`}
-            aside="jaune ≥ objectif · gris en dessous · rose aujourd'hui"
+            title={t("stats.daily_title", { target: dur(target) })}
+            aside={t("stats.daily_aside")}
           >
             <Chart option={dailyOpt} height={desktop ? 190 : 160} onPick={(i) => dailyDays[i] && openDay(dailyDays[i].date)} />
           </Block>
 
           <div className="grid gap-5 pt-5 lg:grid-cols-2 lg:gap-10 lg:pt-10">
-            <Block title="ÉCART PAR SEMAINE · ▲ au-dessus, ▼ en dessous" aside={`▲ ${signed(weekExtremes[0])} · ▼ ${signed(weekExtremes[1])}`}>
+            <Block title={t("stats.weekly_title")} aside={`▲ ${signed(weekExtremes[0])} · ▼ ${signed(weekExtremes[1])}`}>
               <Chart option={weeklyOpt} height={desktop ? 200 : 130} />
             </Block>
-            <Block title="TRAVAILLÉ (plein) ET OBJECTIF (contour) PAR MOIS">
+            <Block title={t("stats.monthly_title")}>
               <Chart option={monthlyOpt} height={200} />
             </Block>
           </div>
 
           <div className="grid gap-5 pt-5 lg:grid-cols-[1.4fr_1fr] lg:gap-10 lg:pt-10">
-            <Block title="ARRIVÉES ■ jaune · DÉPARTS ■ papier · PAUSE MIDI ▮ rose" aside="07:00 → 19:00">
+            <Block title={t("stats.arrivals_title")} aside="07:00 → 19:00">
               <Chart option={arrivalOpt} height={desktop ? 240 : 200} onPick={(i) => complete[i] && openDay(complete[i].date)} />
             </Block>
-            <Block title="MOYENNE PAR JOUR DE LA SEMAINE">
+            <Block title={t("stats.weekday_title")}>
               <div className="flex flex-col gap-2.5">
                 {weekdays.rows.map((r) => (
                   <div key={r.wd} className="grid grid-cols-[44px_1fr_96px] items-center gap-3 text-[15px]">
-                    <span className="font-label">{WD[r.wd - 1]}</span>
+                    <span className="font-label">{weekdayShort(locale, r.wd).replace(/\.$/, "").toLowerCase()}</span>
                     <div className="relative h-[22px] bg-[oklch(0.18_0_0)]">
                       <div
                         className={cx("absolute inset-y-0 left-0", r.wd >= 6 ? "bg-paper-dim" : "bg-yellow")}
@@ -540,11 +549,11 @@ export default function Stats() {
                       <div
                         className="absolute -inset-y-[3px] border-l-2 border-dashed border-pink"
                         style={{ left: `${(target / weekdays.scale) * 100}%` }}
-                        title={`objectif ${dur(target)}`}
+                        title={t("stats.weekday_target", { target: dur(target) })}
                       />
                     </div>
                     <span>
-                      <b>{r.n ? dur(r.avg) : "—"}</b> <span className="text-xs text-paper-dim">{r.n} j</span>
+                      <b>{r.n ? dur(r.avg) : "—"}</b> <span className="text-xs text-paper-dim">{t("stats.days_short", { count: r.n })}</span>
                     </span>
                   </div>
                 ))}
@@ -555,29 +564,29 @@ export default function Stats() {
           <section className="flex flex-col gap-4 pt-8 lg:gap-6 lg:pt-14">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
               <h2 className="-rotate-1 self-start bg-pink px-4 py-1 font-display text-3xl leading-none text-onpaper lg:text-[44px]">
-                pause du midi
+                {t("stats.lunch_title")}
               </h2>
               <span className="font-label text-xs text-paper-muted lg:text-[15px]">
-                plus longue coupure centrée entre 11h et 15h, de 10 min à 4 h
+                {t("stats.lunch_rule")}
               </span>
             </div>
 
             {lunch.rows.length === 0 ? (
-              <span className="font-label text-paper-muted">Aucune journée ne couvre le midi sur la période.</span>
+              <span className="font-label text-paper-muted">{t("stats.lunch_none")}</span>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-6 lg:gap-4">
-                  <Kpi label={desktop ? "durée moyenne" : "durée moy."} value={lunch.taken.length ? dur(lunch.avg) : "—"} tone="pink" rotate={-1} />
-                  <Kpi label="durée médiane" value={lunch.taken.length ? dur(lunch.median) : "—"} />
-                  <Kpi label={desktop ? "sortie moyenne" : "sortie moy."} value={lunch.taken.length ? hmOfMinutes(lunch.start) : "—"} />
-                  <Kpi label={desktop ? "retour moyen" : "retour moy."} value={lunch.taken.length ? hmOfMinutes(lunch.end) : "—"} />
+                  <Kpi label={t(desktop ? "stats.lunch_avg" : "stats.lunch_avg_short")} value={lunch.taken.length ? dur(lunch.avg) : "—"} tone="pink" rotate={-1} />
+                  <Kpi label={t("stats.lunch_median")} value={lunch.taken.length ? dur(lunch.median) : "—"} />
+                  <Kpi label={t(desktop ? "stats.lunch_out" : "stats.lunch_out_short")} value={lunch.taken.length ? hmOfMinutes(lunch.start) : "—"} />
+                  <Kpi label={t(desktop ? "stats.lunch_back" : "stats.lunch_back_short")} value={lunch.taken.length ? hmOfMinutes(lunch.end) : "—"} />
                   <Kpi
-                    label={`avec pause · ${lunch.taken.length}/${lunch.rows.length} j`}
-                    value={`${Math.round(lunch.rate * 100)} %`}
+                    label={t("stats.lunch_with_break", { taken: lunch.taken.length, total: lunch.rows.length })}
+                    value={t("stats.percent", { value: Math.round(lunch.rate * 100) })}
                     tone={lunch.rate >= 0.5 ? "yellow" : "red"}
                   />
                   <Kpi
-                    label={`plus longue${lunch.longest ? ` · ${dayLabel(lunch.longest.d.date)}` : ""}`}
+                    label={`${t("stats.lunch_longest")}${lunch.longest ? ` · ${dayLabel(lunch.longest.d.date)}` : ""}`}
                     value={lunch.longest ? dur(lunch.longest.l.minutes) : "—"}
                     rotate={1}
                     onClick={lunch.longest ? () => openDay(lunch.longest!.d.date) : undefined}
@@ -586,8 +595,8 @@ export default function Stats() {
 
                 <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:gap-10">
                   <Block
-                    title={`DURÉE DE LA PAUSE PAR JOUR${lunch.taken.length ? ` · ligne = moyenne ${dur(lunch.avg)}` : ""}`}
-                    aside="■ rouge = pas de pause"
+                    title={`${t("stats.lunch_daily_title")}${lunch.taken.length ? t("stats.lunch_daily_avg", { avg: dur(lunch.avg) }) : ""}`}
+                    aside={t("stats.lunch_daily_aside")}
                   >
                     <Chart
                       option={lunchDailyOpt}
@@ -595,7 +604,7 @@ export default function Stats() {
                       onPick={(i) => lunch.rows[i] && openDay(lunch.rows[i].d.date)}
                     />
                   </Block>
-                  <Block title="HEURE DE SORTIE · par quart d'heure" aside="rose = la plus fréquente">
+                  <Block title={t("stats.lunch_exit_title")} aside={t("stats.lunch_exit_aside")}>
                     <Chart option={lunchStartsOpt} height={desktop ? 200 : 160} />
                   </Block>
                 </div>
