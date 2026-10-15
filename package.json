@@ -1,0 +1,41 @@
+{
+  "name": "opointeuse",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "npm run build && vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "db:migrate:local": "wrangler d1 migrations apply opointeuse --local",
+    "db:migrate:remote": "wrangler d1 migrations apply opointeuse --remote",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "echarts": "^6.1.0",
+    "hono": "^4.13.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.60.1",
+    "@cloudflare/workers-types": "^5.20260925.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2",
+    "wrangler": "^4.141.0"
+  }
+}
