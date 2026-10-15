@@ -21,6 +21,7 @@
     "typecheck": "tsc -b",
     "db:migrate:local": "wrangler d1 migrations apply opointeuse --local",
     "db:migrate:remote": "wrangler d1 migrations apply opointeuse --remote",
+    "user": "tsx scripts/user.ts",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

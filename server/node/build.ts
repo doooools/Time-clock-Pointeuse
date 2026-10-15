@@ -12,6 +12,7 @@ import { readMigrationsDir } from "../migrate";
 
 const ENTRIES: Record<string, string> = {
   index: "server/entry/node.ts",
+  cli: "scripts/user.ts",
 };
 
 const OUT_DIR = "dist/server";
