@@ -35,11 +35,11 @@ import { useOpenDay } from "../lib/viewDay";
 
 const COLS = "grid-cols-[130px_minmax(0,1fr)_100px_150px_110px_210px_90px]";
 
-function toTs(date: string, hm: string): number | null {
+function toTs(date: string, hm: string, tz: string): number | null {
   const min = parseHm(hm);
   if (min === null) return null;
   const { y, m, d } = parseDayKey(date);
-  return zonedToUtc(y, m, d, Math.floor(min / 60), min % 60);
+  return zonedToUtc(tz, y, m, d, Math.floor(min / 60), min % 60);
 }
 
 const sourceLabel = (t: TFn, p: Punch) =>
@@ -49,6 +49,7 @@ const sourceLabel = (t: TFn, p: Punch) =>
 
 function PunchChips({ day, className }: { day: DayResult; className?: string }) {
   const t = useT();
+  const tz = useStore().settings.timezone;
   return (
     <div className={cx("flex flex-wrap gap-2", className)}>
       {day.punches.map((p, i) => {
@@ -57,13 +58,13 @@ function PunchChips({ day, className }: { day: DayResult; className?: string }) 
         return ko ? (
           <span key={p.id} className="inline-flex items-baseline gap-1.5 border-[1.5px] border-dashed border-pink px-2 py-0.5 text-pink">
             <span className="font-label text-[11px]">{sens}</span>
-            <s>{formatClock(p.ts)}</s>
+            <s>{formatClock(p.ts, tz)}</s>
             <span className="font-label text-[11px]">{t("history.not_counted")}</span>
           </span>
         ) : (
           <span key={p.id} className="inline-flex items-baseline gap-1.5 border-[1.5px] border-[oklch(0.55_0.01_90)] px-2 py-0.5" title={sourceLabel(t, p)}>
             <span className="font-label text-[11px] text-paper-muted">{sens}</span>
-            {formatClock(p.ts)}
+            {formatClock(p.ts, tz)}
           </span>
         );
       })}
@@ -78,21 +79,22 @@ function PunchChips({ day, className }: { day: DayResult; className?: string }) 
 
 /* ─────────────── Day editor ─────────────── */
 
-type Half = "journee" | "matin" | "apres-midi";
+type Half = "full" | "am" | "pm";
 const typeOptions = (t: TFn): { value: MarkType | ""; label: string; short?: string }[] => [
   { value: "", label: t("history.type_normal") },
-  { value: "conge", label: t("history.type_leave") },
-  { value: "maladie", label: t("history.type_sick") },
-  { value: "rtt", label: t("history.type_comp"), short: t("history.type_comp_short") },
-  { value: "travail", label: t("history.type_workday"), short: t("history.type_workday_short") },
+  { value: "leave", label: t("history.type_leave") },
+  { value: "sick", label: t("history.type_sick") },
+  { value: "holiday", label: t("history.type_holiday") },
+  { value: "comp_time", label: t("history.type_comp"), short: t("history.type_comp_short") },
+  { value: "workday", label: t("history.type_workday"), short: t("history.type_workday_short") },
 ];
 const halves = (t: TFn): { value: Half; label: string; short?: string }[] => [
-  { value: "journee", label: t("history.half_full"), short: t("history.half_full_short") },
-  { value: "matin", label: t("history.half_am") },
-  { value: "apres-midi", label: t("history.half_pm") },
+  { value: "full", label: t("history.half_full"), short: t("history.half_full_short") },
+  { value: "am", label: t("history.half_am") },
+  { value: "pm", label: t("history.half_pm") },
 ];
 const halfOf = (mark: DayMark | null): Half =>
-  !mark || mark.portion >= 1 ? "journee" : mark.note === "apres-midi" ? "apres-midi" : "matin";
+  !mark || mark.portion >= 1 ? "full" : mark.half === "pm" ? "pm" : "am";
 
 /** Clickable day name: opens the day in the "Today" view. */
 const DAY_LINK = "cursor-pointer text-left decoration-dotted underline-offset-4 hover:text-yellow hover:underline";
@@ -115,32 +117,33 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
     setHalf(halfOf(day.mark));
   }, [day.mark]);
 
-  const halfEnabled = markType === "conge" || markType === "maladie" || markType === "rtt";
-  const portion = halfEnabled && half !== "journee" ? 0.5 : 1;
+  const halfEnabled = markType === "leave" || markType === "sick" || markType === "holiday" || markType === "comp_time";
+  const portion = halfEnabled && half !== "full" ? 0.5 : 1;
   const draftMark: DayMark | null = markType ? { date: day.date, type: markType, portion } : null;
+  const tz = settings.timezone;
   const draftTarget = targetFor(day.date, day.punches.length > 0, draftMark, day.holiday, settings);
   const baseOptions = typeOptions(t);
-  const options = day.mark?.type === "ferie" ? [...baseOptions, { value: "ferie" as const, label: t("history.type_holiday") }] : baseOptions;
+  const options = baseOptions;
 
-  const newTs = newTime ? toTs(day.date, newTime) : null;
+  const newTs = newTime ? toTs(day.date, newTime, tz) : null;
   const nextIsIn = day.punches.length % 2 === 0;
   const dayHeading = `${weekdayLong(locale, day.weekday).toUpperCase()} ${shortDate(day.date)}`;
 
   async function save() {
     const edits = day.punches
       .map((p) => ({ p, v: times[p.id] }))
-      .filter(({ p, v }) => v !== undefined && v !== formatClock(p.ts));
-    for (const { v } of edits) if (toTs(day.date, v) === null) return toast(t("history.invalid_time"), { tone: "error" });
+      .filter(({ p, v }) => v !== undefined && v !== formatClock(p.ts, tz));
+    for (const { v } of edits) if (toTs(day.date, v, tz) === null) return toast(t("history.invalid_time"), { tone: "error" });
     setBusy(true);
     try {
-      for (const { p, v } of edits) await updatePunch(p.id, toTs(day.date, v)!);
-      const noteWanted = portion < 1 ? half : null;
+      for (const { p, v } of edits) await updatePunch(p.id, toTs(day.date, v, tz)!);
+      const halfWanted = portion < 1 && half !== "full" ? half : null;
       const changed =
         (day.mark?.type ?? "") !== markType ||
-        (markType && ((day.mark?.portion ?? 1) !== portion || (day.mark?.note ?? null) !== noteWanted));
+        (markType && ((day.mark?.portion ?? 1) !== portion || (day.mark?.half ?? null) !== halfWanted));
       if (changed) {
         if (markType === "") await clearMark(day.date);
-        else await setMark(day.date, markType, portion, noteWanted ?? undefined);
+        else await setMark(day.date, { type: markType, portion, half: halfWanted, note: day.mark?.note });
       }
       if (edits.length || changed) toast(t("history.day_saved", { day: dayLabel(day.date) }));
       onClose();
@@ -172,7 +175,7 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
       {!sheet && <div className="font-label text-base">{t("history.punches_of", { day: dayHeading })}</div>}
       {day.punches.map((p, i) => {
         const dangling = day.danglingPunch?.id === p.id;
-        const value = times[p.id] ?? formatClock(p.ts);
+        const value = times[p.id] ?? formatClock(p.ts, tz);
         return (
           <div key={p.id} className={cx("grid items-center gap-2 lg:gap-2.5", sheet ? "grid-cols-[78px_minmax(0,1fr)_44px]" : "grid-cols-[90px_130px_1fr]")}>
             {senseTag(i)}
@@ -187,7 +190,7 @@ function DayEditor({ day, sheet, onClose }: { day: DayResult; sheet: boolean; on
             {sheet ? (
               <button
                 className="h-11 cursor-pointer border-2 border-onpaper text-base font-bold"
-                aria-label={t("history.punch_delete_aria", { time: formatClock(p.ts) })}
+                aria-label={t("history.punch_delete_aria", { time: formatClock(p.ts, tz) })}
                 onClick={() => deletePunch(p).catch(() => {})}
               >
                 ✕
@@ -325,12 +328,13 @@ function ForgottenDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
   const t = useT();
   const { locale } = useLocale();
   const { byDay, marks, settings, addPunch, days } = useStore();
+  const tz = settings.timezone;
   const now = useNow(60_000);
-  const today = dayKey(now);
+  const today = dayKey(now, tz);
   const [date, setDate] = useState(today);
   const [time, setTime] = useState("");
   const [busy, setBusy] = useState(false);
-  const ts = date && time ? toTs(date, time) : null;
+  const ts = date && time ? toTs(date, time, tz) : null;
 
   const preview = useMemo(() => {
     if (!date) return null;
@@ -396,11 +400,11 @@ function ForgottenDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
               {(preview.after ?? preview.before).punches.map((p, i) =>
                 p.id === -1 ? (
                   <span key="new" className="bg-pink px-2 py-0.5">
-                    <small className="font-label">{i % 2 ? t("history.out_short") : t("history.in_short")}</small> {formatClock(p.ts)} · {t("history.forgot_new")}
+                    <small className="font-label">{i % 2 ? t("history.out_short") : t("history.in_short")}</small> {formatClock(p.ts, tz)} · {t("history.forgot_new")}
                   </span>
                 ) : (
                   <span key={p.id} className="border-[1.5px] border-onpaper px-2 py-0.5">
-                    <small className="font-label">{i % 2 ? t("history.out_short") : t("history.in_short")}</small> {formatClock(p.ts)}
+                    <small className="font-label">{i % 2 ? t("history.out_short") : t("history.in_short")}</small> {formatClock(p.ts, tz)}
                   </span>
                 ),
               )}
@@ -452,22 +456,23 @@ export default function History() {
   const { locale } = useLocale();
   const dayLabel = (date: string) => dayLabelIn(locale, date);
   const monthName = (month: string) => monthNameIn(locale, month);
-  const { days, byDay, marks, settings, readOnly } = useStore();
+  const { days, byDay, marks, settings } = useStore();
+  const tz = settings.timezone;
   const now = useNow(60_000);
   const desktop = useIsDesktop();
   const [params, setParams] = useSearchParams();
-  const today = dayKey(now);
-  const month = params.get("mois") ?? monthKey(today);
-  const [openDay, setOpenDay] = useState<string | null>(params.get("jour"));
+  const today = dayKey(now, tz);
+  const month = params.get("month") ?? monthKey(today);
+  const [openDay, setOpenDay] = useState<string | null>(params.get("day"));
   const [onlyAnomalies, setOnlyAnomalies] = useState(params.get("anomalies") === "1");
   const [forgotOpen, setForgotOpen] = useState(false);
   const showDay = useOpenDay();
 
   useEffect(() => {
-    const j = params.get("jour");
+    const j = params.get("day");
     if (j) {
       setOpenDay(j);
-      setTimeout(() => document.getElementById(`jour-${j}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+      setTimeout(() => document.getElementById(`day-${j}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     }
   }, [params]);
 
@@ -486,6 +491,7 @@ export default function History() {
           deltaMin: 0,
           anomalies: [],
           balanceMin: 0,
+          inBalance: false,
         },
     );
   }, [days, byDay, marks, settings, month, today, now]);
@@ -511,7 +517,7 @@ export default function History() {
 
   const go = (delta: number) => {
     setOpenDay(null);
-    setParams({ mois: shiftMonth(month, delta) });
+    setParams({ month: shiftMonth(month, delta) });
   };
   const toggle = (date: string) => setOpenDay(openDay === date ? null : date);
   const monthDelta = monthSum?.deltaMin ?? 0;
@@ -545,11 +551,9 @@ export default function History() {
             {t("history.only_anomalies")}
             {anomalyCount > 0 && ` (${anomalyCount})`}
           </Checkbox>
-          {!readOnly && (
-            <button className="btn-primary rotate-1" onClick={() => setForgotOpen(true)}>
-              {t("history.add_forgotten")}
-            </button>
-          )}
+          <button className="btn-primary rotate-1" onClick={() => setForgotOpen(true)}>
+            {t("history.add_forgotten")}
+          </button>
         </div>
       </div>
 
@@ -576,11 +580,9 @@ export default function History() {
             </span>
           </Checkbox>
         </div>
-        {!readOnly && (
-          <button className="btn-primary min-h-11 px-3.5 py-0 text-sm" onClick={() => setForgotOpen(true)}>
-            {t("history.add_forgotten_short")}
-          </button>
-        )}
+        <button className="btn-primary min-h-11 px-3.5 py-0 text-sm" onClick={() => setForgotOpen(true)}>
+          {t("history.add_forgotten_short")}
+        </button>
       </div>
 
       {onlyAnomalies && (
@@ -647,7 +649,7 @@ export default function History() {
                   return (
                     <div
                       key={d.date}
-                      id={`jour-${d.date}`}
+                      id={`day-${d.date}`}
                       className={cx("grid border-b border-dotted border-[oklch(0.25_0_0)] px-1 py-[5px] text-[13px] text-grey lg:grid-cols-[130px_1fr] lg:px-4")}
                     >
                       <span>
@@ -662,7 +664,7 @@ export default function History() {
                 const open = openDay === d.date;
                 const noDelta = d.targetMin === 0 && d.workedMin === 0;
                 return (
-                  <div key={d.date} id={`jour-${d.date}`}>
+                  <div key={d.date} id={`day-${d.date}`}>
                     {/* Desktop row */}
                     <div
                       className={cx("hidden items-center border-b border-line px-4 py-[11px] hover:bg-[oklch(0.18_0_0)] lg:grid", COLS, open && "bg-[oklch(0.18_0_0)]")}
@@ -672,8 +674,8 @@ export default function History() {
                       </button>
                       <PunchChips day={d} />
                       <span className="font-bold">{d.workedMin > 0 || d.targetMin > 0 ? dur(d.workedMin) : ""}</span>
-                      <span>{noDelta ? "" : <Delta min={d.deltaMin} live={d.present} />}</span>
-                      <span>{d.isFuture ? "" : <Balance min={d.balanceMin} />}</span>
+                      <span>{noDelta ? "" : d.inBalance ? <Delta min={d.deltaMin} live={d.present} /> : <span className="text-paper-muted">{signed(d.deltaMin)}</span>}</span>
+                      <span>{d.isFuture ? "" : d.inBalance ? <Balance min={d.balanceMin} /> : <span className="text-paper-muted">–</span>}</span>
                       <span className="flex flex-wrap items-center gap-1.5">
                         <AnomalyPill day={d} className="text-sm" />
                         <DayTypeBadge day={d} className="text-[13px]" />
@@ -683,38 +685,34 @@ export default function History() {
                           </span>
                         )}
                       </span>
-                      {readOnly ? (
-                        <span />
-                      ) : (
-                        <button
-                          className="cursor-pointer text-right font-label text-sm text-paper-muted hover:text-yellow"
-                          onClick={() => toggle(d.date)}
-                          aria-expanded={open}
-                        >
-                          {open ? t("history.close_row") : t("history.fix")}
-                        </button>
-                      )}
+                      <button
+                        className="cursor-pointer text-right font-label text-sm text-paper-muted hover:text-yellow"
+                        onClick={() => toggle(d.date)}
+                        aria-expanded={open}
+                      >
+                        {open ? t("history.close_row") : t("history.fix")}
+                      </button>
                     </div>
                     {/* Mobile row */}
                     <button
                       className="flex min-h-11 w-full cursor-pointer flex-col justify-center gap-1.5 border-b border-line px-1 py-2.5 text-left lg:hidden"
-                      onClick={() => !readOnly && toggle(d.date)}
+                      onClick={() => toggle(d.date)}
                     >
                       <span className="flex w-full items-baseline justify-between text-[15px]">
                         <b className={cx(d.isToday && "text-pink")}>{dayLabel(d.date)}</b>
                         <span className="flex items-baseline gap-2.5">
                           <span>{d.workedMin > 0 || d.targetMin > 0 ? dur(d.workedMin) : ""}</span>
-                          {!noDelta && <Delta min={d.deltaMin} live={d.present} />}
+                          {!noDelta && (d.inBalance ? <Delta min={d.deltaMin} live={d.present} /> : <span className="text-paper-muted">{signed(d.deltaMin)}</span>)}
                           <span className="text-paper-muted">›</span>
                         </span>
                       </span>
                       <span className="flex flex-wrap gap-1.5 text-[13px] text-[oklch(0.82_0.01_90)]">
-                        {d.punches.length > 0 && <span>{d.punches.map((p) => formatClock(p.ts)).join(" · ")}</span>}
+                        {d.punches.length > 0 && <span>{d.punches.map((p) => formatClock(p.ts, tz)).join(" · ")}</span>}
                         <AnomalyPill day={d} className="text-xs" />
                         <DayTypeBadge day={d} className="text-xs" />
                       </span>
                     </button>
-                    {open && !readOnly && desktop && <DayEditor day={d} sheet={false} onClose={() => setOpenDay(null)} />}
+                    {open && desktop && <DayEditor day={d} sheet={false} onClose={() => setOpenDay(null)} />}
                   </div>
                 );
               })}
@@ -723,13 +721,13 @@ export default function History() {
         })}
       </div>
 
-      {editing && !readOnly && !desktop && <DayEditor day={editing} sheet onClose={() => setOpenDay(null)} />}
-      {forgotOpen && !readOnly && (
+      {editing && !desktop && <DayEditor day={editing} sheet onClose={() => setOpenDay(null)} />}
+      {forgotOpen && (
         <ForgottenDialog
           onClose={() => setForgotOpen(false)}
           onAdded={(date) => {
             setForgotOpen(false);
-            setParams({ mois: monthKey(date), jour: date });
+            setParams({ month: monthKey(date), day: date });
           }}
         />
       )}

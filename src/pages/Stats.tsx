@@ -151,7 +151,8 @@ export default function Stats() {
   const { days: allDays, settings } = useStore();
   const desktop = useIsDesktop();
   const [period, setPeriod] = useState<Period>("1a");
-  const today = dayKey(Date.now());
+  const tz = settings.timezone;
+  const today = dayKey(Date.now(), tz);
   const target = settings.dailyTargetMin;
   const openDay = useOpenDay();
 
@@ -164,11 +165,10 @@ export default function Stats() {
 
   const worked = useMemo(() => days.filter((d) => d.workedMin > 0), [days]);
   const complete = useMemo(() => worked.filter((d) => d.intervals.length > 0 && !d.present), [worked]);
-  const shortPair = settings.shortPairMin;
 
   const kpis = useMemo(() => {
-    const arrivals = complete.map((d) => minutesOfDay(d.intervals[0].start));
-    const departures = complete.map((d) => minutesOfDay(d.intervals[d.intervals.length - 1].end));
+    const arrivals = complete.map((d) => minutesOfDay(d.intervals[0].start, tz));
+    const departures = complete.map((d) => minutesOfDay(d.intervals[d.intervals.length - 1].end, tz));
     const breaks = complete
       .filter((d) => d.intervals.length > 1)
       .map((d) => d.intervals.slice(1).reduce((a, it, i) => a + (it.start - d.intervals[i].end) / 60000, 0));
@@ -179,7 +179,7 @@ export default function Stats() {
       departure: avg(departures),
       pause: avg(breaks),
       best,
-      delta: days.reduce((a, d) => a + d.deltaMin, 0),
+      delta: days.reduce((a, d) => a + (d.inBalance ? d.deltaMin : 0), 0),
     };
   }, [days, worked, complete]);
 
@@ -304,9 +304,9 @@ export default function Stats() {
   );
 
   const arrivalOpt: ChartOption = useMemo(() => {
-    const arr = complete.map((d) => Math.round(minutesOfDay(d.intervals[0].start)));
-    const dep = complete.map((d) => Math.round(minutesOfDay(d.intervals[d.intervals.length - 1].end)));
-    const lun = complete.map((d) => lunchBreak(d.intervals, shortPair));
+    const arr = complete.map((d) => Math.round(minutesOfDay(d.intervals[0].start, tz)));
+    const dep = complete.map((d) => Math.round(minutesOfDay(d.intervals[d.intervals.length - 1].end, tz)));
+    const lun = complete.map((d) => lunchBreak(d.intervals, settings));
     const lunchName = t("stats.series_lunch");
     const lo = Math.min(420, ...arr.map((m) => Math.floor(m / 60) * 60));
     const hi = Math.max(1140, ...dep.map((m) => Math.ceil(m / 60) * 60));
@@ -319,7 +319,7 @@ export default function Stats() {
           const day = dayLabelIn(locale, complete[p.dataIndex].date);
           const l = lun[p.dataIndex];
           if (p.seriesName === lunchName && l) {
-            return `${day} · ${lunchName} ${hmOfMinutes(minutesOfDay(l.start))} → ${hmOfMinutes(minutesOfDay(l.end))} (${dur(l.minutes)})${hint}`;
+            return `${day} · ${lunchName} ${hmOfMinutes(minutesOfDay(l.start, tz))} → ${hmOfMinutes(minutesOfDay(l.end, tz))} (${dur(l.minutes)})${hint}`;
           }
           return `${day} · ${p.seriesName} ${hmOfMinutes(p.value[1])}${hint}`;
         },
@@ -338,7 +338,7 @@ export default function Stats() {
           silent: true,
           tooltip: { show: false },
           itemStyle: { color: "transparent" },
-          data: lun.map((l) => (l ? Math.round(minutesOfDay(l.start)) : "-")),
+          data: lun.map((l) => (l ? Math.round(minutesOfDay(l.start, tz)) : "-")),
         },
         {
           name: lunchName,
@@ -350,13 +350,13 @@ export default function Stats() {
         },
       ],
     };
-  }, [complete, shortPair, locale, t, hint]);
+  }, [complete, settings, tz, locale, t, hint]);
 
   // Lunch break: days that cover midday (or have a break), with the detected break or null.
   const lunch = useMemo(() => {
     const rows = worked
-      .map((d) => ({ d, l: lunchBreak(d.intervals, shortPair) }))
-      .filter((r) => r.l || coversMidday(r.d.intervals));
+      .map((d) => ({ d, l: lunchBreak(d.intervals, settings) }))
+      .filter((r) => r.l || coversMidday(r.d.intervals, tz));
     const taken = rows.filter((r): r is { d: DayResult; l: LunchBreak } => r.l !== null);
     const mins = taken.map((r) => r.l.minutes);
     return {
@@ -364,12 +364,12 @@ export default function Stats() {
       taken,
       avg: avg(mins),
       median: median(mins),
-      start: avg(taken.map((r) => minutesOfDay(r.l.start))),
-      end: avg(taken.map((r) => minutesOfDay(r.l.end))),
+      start: avg(taken.map((r) => minutesOfDay(r.l.start, tz))),
+      end: avg(taken.map((r) => minutesOfDay(r.l.end, tz))),
       rate: rows.length ? taken.length / rows.length : 0,
       longest: taken.reduce<(typeof taken)[number] | null>((b, r) => (!b || r.l.minutes > b.l.minutes ? r : b), null),
     };
-  }, [worked, shortPair]);
+  }, [worked, settings, tz]);
 
   const lunchDailyOpt: ChartOption = useMemo(() => {
     const rows = lunch.rows;
@@ -381,7 +381,7 @@ export default function Stats() {
         formatter: (ps: { dataIndex: number }[]) => {
           const { d, l } = rows[ps[0].dataIndex];
           return l
-            ? `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_break")} <b>${dur(l.minutes)}</b><br/>${hmOfMinutes(minutesOfDay(l.start))} → ${hmOfMinutes(minutesOfDay(l.end))}${hint}`
+            ? `${dayLabelIn(locale, d.date)}<br/>${t("stats.tip_break")} <b>${dur(l.minutes)}</b><br/>${hmOfMinutes(minutesOfDay(l.start, tz))} → ${hmOfMinutes(minutesOfDay(l.end, tz))}${hint}`
             : `${dayLabelIn(locale, d.date)}<br/><b>${t("stats.tip_no_break")}</b>${hint}`;
         },
       },
@@ -417,7 +417,7 @@ export default function Stats() {
 
   // Exit times split into quarter hours.
   const lunchStarts = useMemo(() => {
-    const starts = lunch.taken.map((r) => minutesOfDay(r.l.start));
+    const starts = lunch.taken.map((r) => minutesOfDay(r.l.start, tz));
     const lo = Math.min(11 * 60, ...starts.map((m) => Math.floor(m / 15) * 15));
     const hi = Math.max(14 * 60, ...starts.map((m) => Math.floor(m / 15) * 15 + 15));
     const buckets = Array.from({ length: (hi - lo) / 15 }, (_, i) => ({ from: lo + i * 15, n: 0 }));
@@ -496,7 +496,7 @@ export default function Stats() {
           </div>
           <div className="flex flex-wrap gap-3 text-[15px] text-[oklch(0.82_0.01_90)]">
             {t("stats.empty_hint")}
-            <Link to="/donnees" className="font-label text-yellow hover:text-pink">
+            <Link to="/data" className="font-label text-yellow hover:text-pink">
               {t("stats.empty_import")}
             </Link>
           </div>

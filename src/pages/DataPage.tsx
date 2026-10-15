@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { parseRawTimestamps, type ParseResult } from "../../shared/parse";
+import { PARSE_ISSUE_LABELS } from "../../shared/labels";
+import { parseRawTimestamps, type DateOrder, type ParseResult } from "../../shared/parse";
 import { dayKey, formatClock, monthKey } from "../../shared/time";
 import { arrowOf, cx, Segmented } from "../components/Widgets";
 import { dayLabel as dayLabelIn, monthYear } from "../components/charts/intl";
@@ -14,7 +15,7 @@ const PREVIEW_DAYS = 30;
 function ExportSection() {
   const t = useT();
   const { locale } = useLocale();
-  const { days } = useStore();
+  const { days, settings } = useStore();
   const past = days.filter((d) => !d.isFuture);
   const months = [...new Set(past.map((d) => monthKey(d.date)))].reverse();
   const years = [...new Set(past.map((d) => d.date.slice(0, 4)))].reverse();
@@ -89,14 +90,14 @@ function ExportSection() {
             <button
               className="btn-primary flex-1 p-3 text-[17px]"
               disabled={!selection.days.length}
-              onClick={() => exportXlsx(selection.days, t("data.workbook_title", { title: selection.title }), `opointeuse-${selection.slug}.xlsx`, locale)}
+              onClick={() => exportXlsx(selection.days, t("data.workbook_title", { title: selection.title }), `opointeuse-${selection.slug}.xlsx`, locale, settings.timezone)}
             >
               {t("data.download_xlsx")}
             </button>
             <button
               className="btn-secondary flex-1 p-2.5 text-[17px]"
               disabled={!selection.days.length}
-              onClick={() => exportCsv(selection.days, `opointeuse-${selection.slug}.csv`, locale)}
+              onClick={() => exportCsv(selection.days, `opointeuse-${selection.slug}.csv`, locale, settings.timezone)}
             >
               {t("data.download_csv")}
             </button>
@@ -119,7 +120,9 @@ async function readFile(file: File): Promise<string> {
 function ImportSection() {
   const t = useT();
   const { locale } = useLocale();
-  const { punches, bulkImport } = useStore();
+  const { punches, bulkImport, settings } = useStore();
+  const tz = settings.timezone;
+  const [dateOrder, setDateOrder] = useState<DateOrder>(locale === "fr" ? "dmy" : "mdy");
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -139,12 +142,12 @@ function ImportSection() {
     });
     const byDay = new Map<string, number[]>();
     for (const ts of kept) {
-      const k = dayKey(ts);
+      const k = dayKey(ts, tz);
       byDay.set(k, [...(byDay.get(k) ?? []), ts]);
     }
     const daysList = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b));
     return { dups: rows.length - kept.length, kept, days: daysList };
-  }, [result, punches]);
+  }, [result, punches, tz]);
 
   async function onFile(file: File) {
     try {
@@ -215,10 +218,26 @@ function ImportSection() {
             className="hidden"
             onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
           />
+          <select
+            aria-label={t("data.date_order_aria")}
+            className="field cursor-pointer py-2 text-sm"
+            value={dateOrder}
+            onChange={(e) => {
+              setDateOrder(e.target.value as DateOrder);
+              setResult(null);
+            }}
+          >
+            <option value="dmy" className="bg-ink">
+              {t("data.date_order_dmy")}
+            </option>
+            <option value="mdy" className="bg-ink">
+              {t("data.date_order_mdy")}
+            </option>
+          </select>
           <button
             className="btn cursor-pointer bg-paper p-2.5 text-onpaper hover:bg-white disabled:bg-transparent"
             disabled={!text.trim()}
-            onClick={() => setResult(parseRawTimestamps(text))}
+            onClick={() => setResult(parseRawTimestamps(text, { tz, dateOrder }))}
           >
             {t("data.analyze")}
           </button>
@@ -257,7 +276,7 @@ function ImportSection() {
                   <div key={i.line} className="grid grid-cols-[80px_minmax(0,1fr)] gap-x-2.5 border-b border-dotted border-[oklch(0.35_0_0)] py-1.5 lg:grid-cols-[80px_260px_1fr]">
                     <span className="text-red-text">{t("data.line_n", { line: i.line })}</span>
                     <span className="truncate">{i.raw}</span>
-                    <span className="col-start-2 text-paper-muted lg:col-start-auto lg:text-paper">{i.reason}</span>
+                    <span className="col-start-2 text-paper-muted lg:col-start-auto lg:text-paper">{PARSE_ISSUE_LABELS[locale][i.code]}</span>
                   </div>
                 ))}
               </div>
@@ -272,7 +291,7 @@ function ImportSection() {
                   <span>
                     {dayLabelIn(locale, date)}/{date.slice(0, 4)}
                   </span>
-                  <span>{stamps.map((ts) => formatClock(ts)).join(" · ")}</span>
+                  <span>{stamps.map((ts) => formatClock(ts, tz)).join(" · ")}</span>
                   <span className="text-right">+ {stamps.length}</span>
                 </div>
               ))}
@@ -297,11 +316,10 @@ function ImportSection() {
 }
 
 export default function DataPage() {
-  const { readOnly } = useStore();
   return (
     <div className="grid items-start gap-12 pt-6 lg:grid-cols-[480px_1fr] lg:gap-10 lg:pt-10">
       <ExportSection />
-      {!readOnly && <ImportSection />}
+      <ImportSection />
     </div>
   );
 }
