@@ -10,12 +10,12 @@ lecteur de badge s'en charge) : le pointage est enregistré, l'entrée ou la sor
 l'application web affiche votre solde d'heures en temps réel.** Elle est pensée pour une personne seule ou une petite
 équipe, et tourne sur Cloudflare Workers + D1 (offre gratuite), sur n'importe quel serveur Node, ou dans Docker.
 
-![Aujourd'hui : solde en direct et temps travaillé](docs/images/today.png)
-![Historique : pointages modifiables](docs/images/history.png)
-![Stats : semaines, mois et carte de chaleur](docs/images/stats.png)
-![Équipe : qui est là, membres, rôles](docs/images/team.png)
-![Fenêtre de notification : un collègue a corrigé vos heures](docs/images/notifications.png)
-<img src="docs/images/today-mobile.png" alt="Aujourd'hui sur téléphone" width="240">
+![Aujourd'hui : solde en direct et temps travaillé](docs/images/fr/today.png)
+![Historique : pointages modifiables](docs/images/fr/history.png)
+![Stats : semaines, mois et carte de chaleur](docs/images/fr/stats.png)
+![Équipe : qui est là, membres, rôles](docs/images/fr/team.png)
+![Fenêtre de notification : un collègue a corrigé vos heures](docs/images/fr/notifications.png)
+<img src="docs/images/fr/today-mobile.png" alt="Aujourd'hui sur téléphone" width="240">
 
 ## Fonctionnalités
 
