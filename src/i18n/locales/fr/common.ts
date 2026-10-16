@@ -1,7 +1,7 @@
 // Shared strings: navigation, widgets, toasts, language switch (French is the reference dictionary).
 export const common = {
-  brand: "POINTEUSE",
-  app_title: "Pointeuse",
+  brand: "LA POINTEUSE",
+  app_title: "La Pointeuse",
 
   // Empty states (new account)
   emptyTitle: "RIEN À POINTER POUR L'INSTANT",
